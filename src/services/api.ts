@@ -1,6 +1,8 @@
 import { sessionStorage } from './sessionStorage'
+import { DEMO_EMAIL, DEMO_PASSWORD, demoEvents, demoModules } from './demo'
 
 const BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5080/api'
+export const DEMO_MODE = process.env.EXPO_PUBLIC_DEMO_MODE !== 'false'
 let accessToken: string | null = null
 
 type TokenPair = { accessToken: string; refreshToken: string }
@@ -32,6 +34,11 @@ export async function restore() {
 }
 
 export async function login(identifier: string, password: string) {
+  if (DEMO_MODE) {
+    if (identifier !== DEMO_EMAIL || password !== DEMO_PASSWORD) throw new Error(`Modo demo: usa ${DEMO_EMAIL} / ${DEMO_PASSWORD}`)
+    await saveTokens({ accessToken: 'demo-access-token', refreshToken: 'demo-refresh-token' })
+    return
+  }
   const response = await fetchApi(`${BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -47,6 +54,7 @@ export async function logout() {
 }
 
 export async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
+  if (DEMO_MODE) return demoData<T>(path)
   const response = await fetchApi(`${BASE}${path}`, {
     method,
     headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
@@ -57,6 +65,7 @@ export async function request<T>(path: string, method = 'GET', body?: unknown): 
 }
 
 export async function api<T>(path: string): Promise<T> {
+  if (DEMO_MODE) return demoData<T>(path)
   let response = await fetchApi(`${BASE}${path}`, { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} })
   if (response.status === 401) {
     const refreshToken = await sessionStorage.get('refreshToken')
@@ -73,4 +82,11 @@ export async function api<T>(path: string): Promise<T> {
   }
   if (!response.ok) throw new Error(await errorMessage(response, 'Error de red.'))
   return response.json()
+}
+
+function demoData<T>(path: string): T {
+  if (path === '/events') return demoEvents as T
+  if (path.endsWith('/modules/navigation')) return demoModules as T
+  if (path.endsWith('/modules')) return demoModules as T
+  return demoEvents[0] as T
 }
