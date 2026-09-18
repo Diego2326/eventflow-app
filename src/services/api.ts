@@ -18,13 +18,21 @@ async function errorMessage(response: Response, fallback: string) {
   return payload?.error?.message ?? fallback
 }
 
+async function fetchApi(input: string, init?: RequestInit) {
+  try {
+    return await fetch(input, init)
+  } catch {
+    throw new Error('No se pudo conectar con EventFlow. Verifica que la API esté encendida y que EXPO_PUBLIC_API_URL sea correcta.')
+  }
+}
+
 export async function restore() {
   accessToken = await sessionStorage.get('accessToken')
   return Boolean(accessToken)
 }
 
 export async function login(identifier: string, password: string) {
-  const response = await fetch(`${BASE}/auth/login`, {
+  const response = await fetchApi(`${BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ identifier, password }),
@@ -39,7 +47,7 @@ export async function logout() {
 }
 
 export async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
-  const response = await fetch(`${BASE}${path}`, {
+  const response = await fetchApi(`${BASE}${path}`, {
     method,
     headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -49,11 +57,11 @@ export async function request<T>(path: string, method = 'GET', body?: unknown): 
 }
 
 export async function api<T>(path: string): Promise<T> {
-  let response = await fetch(`${BASE}${path}`, { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} })
+  let response = await fetchApi(`${BASE}${path}`, { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} })
   if (response.status === 401) {
     const refreshToken = await sessionStorage.get('refreshToken')
     if (refreshToken) {
-      const refresh = await fetch(`${BASE}/auth/refresh`, {
+      const refresh = await fetchApi(`${BASE}/auth/refresh`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refreshToken }),
       })
       if (refresh.ok) {
