@@ -1,7 +1,68 @@
-import * as SecureStore from 'expo-secure-store'
-const BASE=process.env.EXPO_PUBLIC_API_URL??'http://localhost:5080/api';let access:string|null=null
-export async function restore(){access=await SecureStore.getItemAsync('accessToken');return !!access}
-export async function login(identifier:string,password:string){const response=await fetch(`${BASE}/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({identifier,password})});if(!response.ok)throw new Error((await response.json()).error?.message??'No fue posible iniciar sesión.');const data=await response.json();access=data.accessToken;await Promise.all([SecureStore.setItemAsync('accessToken',data.accessToken),SecureStore.setItemAsync('refreshToken',data.refreshToken)])}
-export async function logout(){access=null;await Promise.all([SecureStore.deleteItemAsync('accessToken'),SecureStore.deleteItemAsync('refreshToken')])}
-export async function request<T>(path:string,method='GET',body?:unknown):Promise<T>{const response=await fetch(`${BASE}${path}`,{method,headers:{'Content-Type':'application/json',...(access?{Authorization:`Bearer ${access}`}:{})},body:body===undefined?undefined:JSON.stringify(body)});if(!response.ok)throw new Error((await response.json()).error?.message??'No fue posible completar la solicitud.');return response.status===204?undefined as T:response.json()}
-export async function api<T>(path:string):Promise<T>{let response=await fetch(`${BASE}${path}`,{headers:access?{Authorization:`Bearer ${access}`}:{}});if(response.status===401){const refreshToken=await SecureStore.getItemAsync('refreshToken');if(refreshToken){const refresh=await fetch(`${BASE}/auth/refresh`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({refreshToken})});if(refresh.ok){const pair=await refresh.json();access=pair.accessToken;await Promise.all([SecureStore.setItemAsync('accessToken',pair.accessToken),SecureStore.setItemAsync('refreshToken',pair.refreshToken)]);return api<T>(path)}}}if(!response.ok)throw new Error((await response.json()).error?.message??'Error de red.');return response.json()}
+import { sessionStorage } from './sessionStorage'
+
+const BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5080/api'
+let accessToken: string | null = null
+
+type TokenPair = { accessToken: string; refreshToken: string }
+
+async function saveTokens(tokens: TokenPair) {
+  accessToken = tokens.accessToken
+  await Promise.all([
+    sessionStorage.set('accessToken', tokens.accessToken),
+    sessionStorage.set('refreshToken', tokens.refreshToken),
+  ])
+}
+
+async function errorMessage(response: Response, fallback: string) {
+  const payload = await response.json().catch(() => null)
+  return payload?.error?.message ?? fallback
+}
+
+export async function restore() {
+  accessToken = await sessionStorage.get('accessToken')
+  return Boolean(accessToken)
+}
+
+export async function login(identifier: string, password: string) {
+  const response = await fetch(`${BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ identifier, password }),
+  })
+  if (!response.ok) throw new Error(await errorMessage(response, 'No fue posible iniciar sesión.'))
+  await saveTokens(await response.json())
+}
+
+export async function logout() {
+  accessToken = null
+  await Promise.all([sessionStorage.remove('accessToken'), sessionStorage.remove('refreshToken')])
+}
+
+export async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
+  const response = await fetch(`${BASE}${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  if (!response.ok) throw new Error(await errorMessage(response, 'No fue posible completar la solicitud.'))
+  return response.status === 204 ? undefined as T : response.json()
+}
+
+export async function api<T>(path: string): Promise<T> {
+  let response = await fetch(`${BASE}${path}`, { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} })
+  if (response.status === 401) {
+    const refreshToken = await sessionStorage.get('refreshToken')
+    if (refreshToken) {
+      const refresh = await fetch(`${BASE}/auth/refresh`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refreshToken }),
+      })
+      if (refresh.ok) {
+        await saveTokens(await refresh.json())
+        return api<T>(path)
+      }
+    }
+    await logout()
+  }
+  if (!response.ok) throw new Error(await errorMessage(response, 'Error de red.'))
+  return response.json()
+}
