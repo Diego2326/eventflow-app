@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, View } from 'react-native'
+import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { styles } from '../theme/styles'
 
 export function AuthScreenShell({ children }: { children: ReactNode }) {

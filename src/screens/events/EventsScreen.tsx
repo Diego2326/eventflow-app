@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ActivityIndicator, FlatList, Pressable, SafeAreaView, Text, View } from 'react-native'
+import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { api, logout } from '../../services/api'
 import type { EventItem } from '../../types/events'
 import { styles } from '../../theme/styles'
