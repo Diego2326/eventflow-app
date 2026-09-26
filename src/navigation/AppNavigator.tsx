@@ -1,43 +1,60 @@
 import { NavigationContainer } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
-import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen'
-import { LoginScreen } from '../screens/auth/LoginScreen'
-import { RegisterScreen } from '../screens/auth/RegisterScreen'
-import { ResetPasswordScreen } from '../screens/auth/ResetPasswordScreen'
-import { VerifyAccountScreen } from '../screens/auth/VerifyAccountScreen'
-import { CreateEventScreen } from '../screens/events/CreateEventScreen'
-import { EventHomeScreen } from '../screens/events/EventHomeScreen'
-import { EventsScreen } from '../screens/events/EventsScreen'
-import { ModuleManagementScreen } from '../screens/events/ModuleManagementScreen'
-import { ProfileScreen } from '../screens/profile/ProfileScreen'
-import type { EventItem } from '../types/events'
+import { createNativeBottomTabNavigator } from '@react-navigation/bottom-tabs/unstable'
+import { Platform } from 'react-native'
+import { GuestAccessScreen } from '../screens/guest/GuestAccessScreen'
+import { GuestHomeScreen } from '../screens/guest/GuestHomeScreen'
+import { RsvpScreen } from '../screens/guest/RsvpScreen'
+import { EventPassScreen } from '../screens/guest/EventPassScreen'
+import { AgendaScreen } from '../screens/guest/AgendaScreen'
+import { NotificationsScreen } from '../screens/guest/NotificationsScreen'
+import { AssistanceScreen } from '../screens/guest/AssistanceScreen'
+import { MapScreen } from '../screens/guest/MapScreen'
 
 export type RootStackParamList = {
-  Login: undefined
-  Registro: undefined
-  Recuperación: undefined
-  'Verificar cuenta': undefined
-  'Restablecer contraseña': undefined
-  Eventos: undefined
-  Perfil: undefined
-  'Crear evento': undefined
-  'Inicio del evento': { event: EventItem }
-  'Gestionar módulos': { event: EventItem }
+  Invitación: { token?: string } | undefined
+  Inicio: undefined
+  'Confirmar asistencia': undefined
+  'Event Pass': undefined
+  Agenda: undefined
+  Avisos: undefined
+  Asistencia: undefined
+  Mapa: undefined
+}
+
+export type GuestTabParamList = {
+  Resumen: undefined
+  Pase: undefined
+  Programa: undefined
+  Ayuda: undefined
 }
 
 const Stack = createNativeStackNavigator<RootStackParamList>()
+const Tab = createNativeBottomTabNavigator<GuestTabParamList>()
 
-export function AppNavigator({ signedIn }: { signedIn: boolean }) {
-  return <NavigationContainer><Stack.Navigator initialRouteName={signedIn ? 'Eventos' : 'Login'} screenOptions={{ headerShadowVisible: false, headerStyle: { backgroundColor: '#f5f1e9' }, headerTitleStyle: { fontWeight: '700' }, contentStyle: { backgroundColor: '#f5f1e9' } }}>
-    <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
-    <Stack.Screen name="Registro" component={RegisterScreen} />
-    <Stack.Screen name="Recuperación" component={ForgotPasswordScreen} />
-    <Stack.Screen name="Verificar cuenta" component={VerifyAccountScreen} />
-    <Stack.Screen name="Restablecer contraseña" component={ResetPasswordScreen} />
-    <Stack.Screen name="Eventos" component={EventsScreen} options={{ headerShown: false }} />
-    <Stack.Screen name="Perfil" component={ProfileScreen} />
-    <Stack.Screen name="Crear evento" component={CreateEventScreen} />
-    <Stack.Screen name="Inicio del evento" component={EventHomeScreen} />
-    <Stack.Screen name="Gestionar módulos" component={ModuleManagementScreen} />
+const tabIcon = (name: 'house.fill' | 'qrcode' | 'calendar' | 'hand.raised.fill') => Platform.OS === 'ios'
+  ? { type: 'sfSymbol' as const, name }
+  : { type: 'image' as const, source: require('../../assets/eventflow-mark.png') }
+
+function GuestTabs() {
+  return <Tab.Navigator screenOptions={{ headerShown: false, tabBarActiveTintColor: '#f56642' }}>
+    <Tab.Screen name="Resumen" component={GuestHomeScreen} options={{ tabBarLabel: 'Inicio', tabBarIcon: tabIcon('house.fill') }} />
+    <Tab.Screen name="Pase" component={EventPassScreen} options={{ tabBarLabel: 'Pase', tabBarIcon: tabIcon('qrcode') }} />
+    <Tab.Screen name="Programa" component={AgendaScreen} options={{ tabBarLabel: 'Agenda', tabBarIcon: tabIcon('calendar') }} />
+    <Tab.Screen name="Ayuda" component={AssistanceScreen} options={{ tabBarLabel: 'Ayuda', tabBarIcon: tabIcon('hand.raised.fill') }} />
+  </Tab.Navigator>
+}
+
+export function AppNavigator({ hasInvitation }: { hasInvitation: boolean }) {
+  const linking = { prefixes: ['eventflow://'], config: { screens: { Invitación: 'invite/:token' } } }
+  return <NavigationContainer linking={linking}><Stack.Navigator initialRouteName={hasInvitation ? 'Inicio' : 'Invitación'} screenOptions={{ headerShadowVisible: false, headerStyle: { backgroundColor: '#f5f1e9' }, headerTitleStyle: { fontWeight: '700' }, contentStyle: { backgroundColor: '#f5f1e9' } }}>
+    <Stack.Screen name="Invitación" component={GuestAccessScreen} options={{ headerShown: false }} />
+    <Stack.Screen name="Inicio" component={GuestTabs} options={{ headerShown: false }} />
+    <Stack.Screen name="Confirmar asistencia" component={RsvpScreen} />
+    <Stack.Screen name="Event Pass" component={EventPassScreen} />
+    <Stack.Screen name="Agenda" component={AgendaScreen} />
+    <Stack.Screen name="Avisos" component={NotificationsScreen} />
+    <Stack.Screen name="Asistencia" component={AssistanceScreen} />
+    <Stack.Screen name="Mapa" component={MapScreen} />
   </Stack.Navigator></NavigationContainer>
 }

@@ -2,6 +2,7 @@
   "expo": {
     "name": "EventFlow",
     "slug": "eventflow",
+    "scheme": "eventflow",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/eventflow-mark.png",
@@ -9,7 +10,7 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.eventflow.app"
+      "bundleIdentifier": "com.eventflow-supabase.app"
     },
     "android": {
       "adaptiveIcon": {

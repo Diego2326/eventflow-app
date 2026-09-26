@@ -1,14 +1,15 @@
 # EventFlow App
 
-Aplicación móvil de EventFlow construida con Expo SDK 55 y React Native. Está conectada por defecto al backend desplegado en Cloud Run y conserva un modo demo opcional.
+Aplicación móvil para invitados de EventFlow, construida con Expo SDK 55 y React Native. Está conectada por defecto al backend desplegado en Cloud Run y conserva un modo demo opcional.
 
 ## Funcionalidad disponible
 
-- Registro, inicio de sesión, verificación de cuenta y recuperación/restablecimiento de contraseña.
-- Persistencia segura de access y refresh tokens, restauración de sesión y renovación automática.
-- Lista, creación, detalle y cambio de estado de eventos.
-- Navegación dinámica y administración de módulos por evento.
-- Consulta y edición del perfil, preferencias, contraseña y desactivación de cuenta.
+- Acceso sin cuenta mediante código o enlace de invitación y deep link `eventflow://invite/:token`.
+- Inicio personalizado con datos del evento y módulos habilitados por el anfitrión.
+- Confirmación de asistencia y registro de acompañantes según el cupo autorizado.
+- Event Pass con QR, estado de RSVP, mesa, asiento, sector e ingresos registrados.
+- Agenda con “ahora/siguiente”, avisos segmentados, mapa y solicitud de asistencia.
+- Barra inferior nativa (`UITabBarController` en iOS) para Inicio, Pase, Agenda y Ayuda.
 
 ## Ejecutar el proyecto
 
@@ -25,21 +26,21 @@ EXPO_PUBLIC_DEMO_MODE=false
 EXPO_PUBLIC_API_URL=https://eventflow-backend-990072178406.us-east4.run.app/api
 ```
 
-Para trabajar sin API, cambia `EXPO_PUBLIC_DEMO_MODE=true`. Las credenciales del modo demo son `ana.organizadora@eventflow.demo` / `EventFlowDemo1!`.
+Para trabajar sin API, cambia `EXPO_PUBLIC_DEMO_MODE=true`; cualquier código abre la experiencia demo. En el backend desplegado, el token del evento sembrado es `demo-sofia-2026`.
 
 ## iOS
 
-El proyecto nativo está generado en `ios/`, usa el bundle identifier `com.eventflow.app` e incluye `Podfile.lock`.
+El proyecto nativo está generado en `ios/`, usa el bundle identifier `com.eventflow-supabase.app` e incluye `Podfile.lock`.
 
 ```bash
 npm install
 cd ios && pod install && cd ..
-npm run ios
+xcodebuild -workspace ios/EventFlow.xcworkspace -scheme EventFlow -configuration Release -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build
 ```
 
 Si cambias iconos, plugins o propiedades nativas de `app.json`, sincroniza de nuevo con `npx expo prebuild --platform ios`.
 
-Expo SDK 55 es compatible con Xcode 26.3. El proyecto y los Pods fueron verificados con una compilación completa para iOS Simulator en modo build-only; la validación no abre ni ejecuta el simulador.
+Expo SDK 55 es compatible con Xcode 26.3. El proyecto y los Pods se verifican con una compilación para dispositivo físico en modo build-only; la validación no abre ni ejecuta el simulador.
 
 ## Verificaciones
 
