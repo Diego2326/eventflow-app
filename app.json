@@ -5,9 +5,11 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/eventflow-mark.png",
+    "plugins": ["expo-secure-store"],
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.eventflow.app"
     },
     "android": {
       "adaptiveIcon": {

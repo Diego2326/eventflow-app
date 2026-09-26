@@ -7,8 +7,8 @@ export const demoEvents: EventItem[] = [
   { id: 'demo-event-2', name: 'Noche de Sabores', type: 'GALA', startsAt: '2026-11-07T18:30:00-06:00', location: 'Casa Santo Domingo' },
 ]
 export const demoModules: EventModule[] = [
-  { code: 'AGENDA', name: 'Agenda', category: 'Planificación', featured: true, order: 1 },
-  { code: 'ACCESS', name: 'Accesos', category: 'Operación', featured: true, order: 2 },
-  { code: 'ANNOUNCEMENTS', name: 'Novedades', category: 'Comunicación', featured: false, order: 3 },
-  { code: 'MAP', name: 'Mapa del evento', category: 'Experiencia', featured: false, order: 4 },
+  { code: 'AGENDA', name: 'Agenda', category: 'Planificación', enabled: true, featured: true, order: 1 },
+  { code: 'ACCESS', name: 'Accesos', category: 'Operación', enabled: true, featured: true, order: 2 },
+  { code: 'ANNOUNCEMENTS', name: 'Novedades', category: 'Comunicación', enabled: true, featured: false, order: 3 },
+  { code: 'MAP', name: 'Mapa del evento', category: 'Experiencia', enabled: true, featured: false, order: 4 },
 ]

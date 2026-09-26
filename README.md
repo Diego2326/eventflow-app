@@ -1,6 +1,16 @@
 # EventFlow App
 
-Aplicación móvil construida con Expo y React Native. Renderiza la navegación del evento dinámicamente según los módulos habilitados.
+Aplicación móvil de EventFlow construida con Expo SDK 57 y React Native. Está conectada por defecto al backend desplegado en Cloud Run y conserva un modo demo opcional.
+
+## Funcionalidad disponible
+
+- Registro, inicio de sesión, verificación de cuenta y recuperación/restablecimiento de contraseña.
+- Persistencia segura de access y refresh tokens, restauración de sesión y renovación automática.
+- Lista, creación, detalle y cambio de estado de eventos.
+- Navegación dinámica y administración de módulos por evento.
+- Consulta y edición del perfil, preferencias, contraseña y desactivación de cuenta.
+
+## Ejecutar el proyecto
 
 ```bash
 cp .env.example .env
@@ -8,6 +18,35 @@ npm install
 npm start
 ```
 
-La app inicia en modo demo sin depender de la API. Usa las credenciales `ana.organizadora@eventflow.demo` / `EventFlowDemo1!`.
+La configuración incluida usa:
 
-Para integrar la API real, crea `.env` desde `.env.example`, define `EXPO_PUBLIC_DEMO_MODE=false` y configura `EXPO_PUBLIC_API_URL` con una URL accesible desde el dispositivo o emulador.
+```text
+EXPO_PUBLIC_DEMO_MODE=false
+EXPO_PUBLIC_API_URL=https://eventflow-backend-990072178406.us-east4.run.app/api
+```
+
+Para trabajar sin API, cambia `EXPO_PUBLIC_DEMO_MODE=true`. Las credenciales del modo demo son `ana.organizadora@eventflow.demo` / `EventFlowDemo1!`.
+
+## iOS
+
+El proyecto nativo está generado en `ios/`, usa el bundle identifier `com.eventflow.app` e incluye `Podfile.lock`.
+
+```bash
+npm install
+cd ios && pod install && cd ..
+npm run ios
+```
+
+Si cambias iconos, plugins o propiedades nativas de `app.json`, sincroniza de nuevo con `npx expo prebuild --platform ios`.
+
+Expo SDK 57 requiere Xcode 26.4 o superior. Los Pods se instalan correctamente en esta máquina, pero Xcode 26.3 no puede compilar `ExpoModulesJSI`; actualiza Xcode antes de ejecutar el build nativo.
+
+## Verificaciones
+
+```bash
+npm run typecheck
+npx expo-doctor
+npx expo export --platform web
+```
+
+En web, el backend debe permitir por CORS el origen desde el que se sirva la aplicación. iOS y Android no dependen de CORS del navegador.
