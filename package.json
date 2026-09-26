@@ -14,7 +14,7 @@
     "react-native": "0.83.10",
     "react-native-qrcode-svg": "^6.3.26",
     "react-native-safe-area-context": "~5.6.2",
-    "react-native-screens": "~4.23.0",
+    "react-native-screens": "^4.25.0",
     "react-native-svg": "15.15.3",
     "react-native-web": "^0.21.2"
   },
@@ -30,6 +30,11 @@
     "typecheck": "tsc --noEmit"
   },
   "expo": {
+    "install": {
+      "exclude": [
+        "react-native-screens"
+      ]
+    },
     "doctor": {
       "appConfigFieldsNotSyncedCheck": {
         "enabled": false

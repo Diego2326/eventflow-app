@@ -10,9 +10,11 @@ import { AgendaScreen } from '../screens/guest/AgendaScreen'
 import { NotificationsScreen } from '../screens/guest/NotificationsScreen'
 import { AssistanceScreen } from '../screens/guest/AssistanceScreen'
 import { MapScreen } from '../screens/guest/MapScreen'
+import { GuestEventsScreen } from '../screens/guest/GuestEventsScreen'
 
 export type RootStackParamList = {
   Invitación: { token?: string } | undefined
+  Eventos: undefined
   Inicio: undefined
   'Confirmar asistencia': undefined
   'Event Pass': undefined
@@ -45,10 +47,11 @@ function GuestTabs() {
   </Tab.Navigator>
 }
 
-export function AppNavigator({ hasInvitation }: { hasInvitation: boolean }) {
+export function AppNavigator({ hasInvitations }: { hasInvitations: boolean }) {
   const linking = { prefixes: ['eventflow://'], config: { screens: { Invitación: 'invite/:token' } } }
-  return <NavigationContainer linking={linking}><Stack.Navigator initialRouteName={hasInvitation ? 'Inicio' : 'Invitación'} screenOptions={{ headerShadowVisible: false, headerStyle: { backgroundColor: '#f5f1e9' }, headerTitleStyle: { fontWeight: '700' }, contentStyle: { backgroundColor: '#f5f1e9' } }}>
+  return <NavigationContainer linking={linking}><Stack.Navigator initialRouteName={hasInvitations ? 'Eventos' : 'Invitación'} screenOptions={{ headerShadowVisible: false, headerStyle: { backgroundColor: '#f5f1e9' }, headerTitleStyle: { fontWeight: '700' }, contentStyle: { backgroundColor: '#f5f1e9' } }}>
     <Stack.Screen name="Invitación" component={GuestAccessScreen} options={{ headerShown: false }} />
+    <Stack.Screen name="Eventos" component={GuestEventsScreen} options={{ headerShown: false }} />
     <Stack.Screen name="Inicio" component={GuestTabs} options={{ headerShown: false }} />
     <Stack.Screen name="Confirmar asistencia" component={RsvpScreen} />
     <Stack.Screen name="Event Pass" component={EventPassScreen} />

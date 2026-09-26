@@ -5,6 +5,7 @@ Aplicación móvil para invitados de EventFlow, construida con Expo SDK 55 y Rea
 ## Funcionalidad disponible
 
 - Acceso sin cuenta mediante código o enlace de invitación y deep link `eventflow://invite/:token`.
+- Cartera de múltiples eventos: permite agregar, conservar, cambiar y eliminar invitaciones.
 - Inicio personalizado con datos del evento y módulos habilitados por el anfitrión.
 - Confirmación de asistencia y registro de acompañantes según el cupo autorizado.
 - Event Pass con QR, estado de RSVP, mesa, asiento, sector e ingresos registrados.

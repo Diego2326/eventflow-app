@@ -4,7 +4,6 @@ import { useFocusEffect } from '@react-navigation/native'
 import type { NativeBottomTabScreenProps } from '@react-navigation/bottom-tabs/unstable'
 import type { GuestTabParamList, RootStackParamList } from '../../navigation/AppNavigator'
 import { useGuestExperience } from '../../hooks/useGuestExperience'
-import { clearGuestToken } from '../../services/guest'
 import { styles } from '../../theme/styles'
 import { ErrorView, formatDate, formatTime, LoadingView } from './shared'
 
@@ -20,10 +19,7 @@ export function GuestHomeScreen({ navigation }: Props) {
   const { invitation, event, modules } = experience
   const status = invitation.status === 'ACCEPTED' ? 'ASISTENCIA CONFIRMADA' : invitation.status === 'DECLINED' ? 'NO ASISTIRÁS' : 'CONFIRMACIÓN PENDIENTE'
 
-  const changeInvitation = async () => {
-    await clearGuestToken()
-    navigation.getParent()?.reset({ index: 0, routes: [{ name: 'Invitación' }] })
-  }
+  const showEvents = () => navigation.getParent()?.navigate('Eventos')
 
   const openModule = (code: string) => {
     const tab = tabRoutes[code]
@@ -55,6 +51,6 @@ export function GuestHomeScreen({ navigation }: Props) {
         <Text style={[styles.moduleDescription, module.featured && styles.guestModuleDescriptionFeatured]}>{module.description}</Text>
       </Pressable>)}
     </View>
-    <Pressable onPress={() => void changeInvitation()}><Text style={styles.centerLink}>Usar otra invitación</Text></Pressable>
+    <Pressable onPress={showEvents}><Text style={styles.centerLink}>Ver mis eventos</Text></Pressable>
   </ScrollView>
 }

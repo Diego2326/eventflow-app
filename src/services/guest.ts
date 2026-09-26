@@ -2,11 +2,52 @@ import { API_BASE, DEMO_MODE } from './api'
 import { sessionStorage } from './sessionStorage'
 import type { AssistanceRequest, GuestExperience, GuestInvitation } from '../types/guest'
 
-const TOKEN_KEY = 'guestInvitationToken'
+const LEGACY_TOKEN_KEY = 'guestInvitationToken'
+const TOKENS_KEY = 'guestInvitationTokens'
+const ACTIVE_TOKEN_KEY = 'activeGuestInvitationToken'
 
-export const getGuestToken = () => sessionStorage.get(TOKEN_KEY)
-export const saveGuestToken = (token: string) => sessionStorage.set(TOKEN_KEY, token.trim())
-export const clearGuestToken = () => sessionStorage.remove(TOKEN_KEY)
+export async function getGuestTokens(): Promise<string[]> {
+  const stored = await sessionStorage.get(TOKENS_KEY)
+  if (stored) {
+    try { return [...new Set(JSON.parse(stored) as string[])].filter(Boolean) } catch { /* migrate below */ }
+  }
+  const legacy = await sessionStorage.get(LEGACY_TOKEN_KEY)
+  if (!legacy) return []
+  await sessionStorage.set(TOKENS_KEY, JSON.stringify([legacy]))
+  await sessionStorage.remove(LEGACY_TOKEN_KEY)
+  return [legacy]
+}
+
+export async function getGuestToken() {
+  const tokens = await getGuestTokens()
+  const active = await sessionStorage.get(ACTIVE_TOKEN_KEY)
+  return active && tokens.includes(active) ? active : tokens[0] ?? null
+}
+
+export async function saveGuestToken(rawToken: string) {
+  const token = rawToken.trim()
+  const tokens = await getGuestTokens()
+  await Promise.all([
+    sessionStorage.set(TOKENS_KEY, JSON.stringify([token, ...tokens.filter(item => item !== token)])),
+    sessionStorage.set(ACTIVE_TOKEN_KEY, token),
+  ])
+}
+
+export const selectGuestToken = (token: string) => sessionStorage.set(ACTIVE_TOKEN_KEY, token)
+
+export async function removeGuestToken(token: string) {
+  const remaining = (await getGuestTokens()).filter(item => item !== token)
+  const active = await sessionStorage.get(ACTIVE_TOKEN_KEY)
+  await sessionStorage.set(TOKENS_KEY, JSON.stringify(remaining))
+  if (active === token) {
+    if (remaining[0]) await sessionStorage.set(ACTIVE_TOKEN_KEY, remaining[0])
+    else await sessionStorage.remove(ACTIVE_TOKEN_KEY)
+  }
+}
+
+export async function clearGuestToken() {
+  await Promise.all([sessionStorage.remove(TOKENS_KEY), sessionStorage.remove(ACTIVE_TOKEN_KEY), sessionStorage.remove(LEGACY_TOKEN_KEY)])
+}
 
 async function guestFetch<T>(token: string, suffix = '', method = 'GET', body?: unknown): Promise<T> {
   if (DEMO_MODE) return demoGuestData(suffix, body) as T
