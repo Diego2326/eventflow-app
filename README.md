@@ -1,6 +1,6 @@
 # EventFlow App
 
-Aplicación móvil de EventFlow construida con Expo SDK 57 y React Native. Está conectada por defecto al backend desplegado en Cloud Run y conserva un modo demo opcional.
+Aplicación móvil de EventFlow construida con Expo SDK 55 y React Native. Está conectada por defecto al backend desplegado en Cloud Run y conserva un modo demo opcional.
 
 ## Funcionalidad disponible
 
@@ -39,7 +39,7 @@ npm run ios
 
 Si cambias iconos, plugins o propiedades nativas de `app.json`, sincroniza de nuevo con `npx expo prebuild --platform ios`.
 
-Expo SDK 57 requiere Xcode 26.4 o superior. Los Pods se instalan correctamente en esta máquina, pero Xcode 26.3 no puede compilar `ExpoModulesJSI`; actualiza Xcode antes de ejecutar el build nativo.
+Expo SDK 55 es compatible con Xcode 26.3. El proyecto y los Pods fueron verificados con una compilación completa para iOS Simulator en modo build-only; la validación no abre ni ejecuta el simulador.
 
 ## Verificaciones
 
