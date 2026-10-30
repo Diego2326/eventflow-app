@@ -1,63 +1,145 @@
 import { NavigationContainer } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
-import { createNativeBottomTabNavigator } from '@react-navigation/bottom-tabs/unstable'
-import { Platform } from 'react-native'
-import { GuestAccessScreen } from '../screens/guest/GuestAccessScreen'
-import { GuestHomeScreen } from '../screens/guest/GuestHomeScreen'
-import { RsvpScreen } from '../screens/guest/RsvpScreen'
-import { EventPassScreen } from '../screens/guest/EventPassScreen'
-import { AgendaScreen } from '../screens/guest/AgendaScreen'
-import { NotificationsScreen } from '../screens/guest/NotificationsScreen'
-import { AssistanceScreen } from '../screens/guest/AssistanceScreen'
-import { MapScreen } from '../screens/guest/MapScreen'
-import { GuestEventsScreen } from '../screens/guest/GuestEventsScreen'
 
-export type RootStackParamList = {
-  Invitación: { token?: string } | undefined
-  Eventos: undefined
-  Inicio: undefined
-  'Confirmar asistencia': undefined
-  'Event Pass': undefined
-  Agenda: undefined
-  Avisos: undefined
-  Asistencia: undefined
-  Mapa: undefined
+import { LoginScreen } from '../screens/auth/LoginScreen'
+import { RegisterScreen } from '../screens/auth/RegisterScreen'
+import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen'
+import { CompleteGoogleRegistrationScreen } from '../screens/auth/CompleteGoogleRegistrationScreen'
+import { VerifyEmailScreen } from '../screens/auth/VerifyEmailScreen'
+import { ResetPasswordScreen } from '../screens/auth/ResetPasswordScreen'
+
+import { HomeScreen } from '../screens/home/HomeScreen'
+
+import { EventsScreen } from '../screens/events/EventsScreen'
+import { EventHomeScreen } from '../screens/events/EventHomeScreen'
+
+import { NotificationsScreen } from '../screens/notifications/NotificationsScreen'
+
+import { ProfileScreen } from '../screens/profile/ProfileScreen'
+import { PersonalInfoScreen } from '../screens/profile/PersonalInfoScreen'
+import { PrivacySecurityScreen } from '../screens/profile/PrivacySecurityScreen'
+import { MisPasesScreen } from '../screens/profile/MisPasesScreen'
+
+const linking = {
+  prefixes: [
+    'eventflow://',
+  ],
+
+  config: {
+    screens: {
+      'Verificar correo': {
+        path: 'verify-email',
+      },
+
+      'Restablecer contraseña': {
+        path: 'reset-password',
+      },
+    },
+  },
 }
 
-export type GuestTabParamList = {
-  Resumen: undefined
-  Pase: undefined
-  Programa: undefined
-  Ayuda: undefined
-}
+const Stack = createNativeStackNavigator()
 
-const Stack = createNativeStackNavigator<RootStackParamList>()
-const Tab = createNativeBottomTabNavigator<GuestTabParamList>()
+export function AppNavigator({
+  signedIn,
+}: {
+  signedIn: boolean
+}) {
+  return (
+    <NavigationContainer
+      linking={linking}
+    >
+      <Stack.Navigator
+        initialRouteName={
+          signedIn
+            ? 'Inicio'
+            : 'Login'
+        }
+        screenOptions={{
+          headerShown: false,
+          headerShadowVisible: false,
+          headerStyle: {
+            backgroundColor: '#F7F7FA',
+          },
+          headerTitleStyle: {
+            fontWeight: '700',
+          },
+          contentStyle: {
+            backgroundColor: '#F7F7FA',
+          },
+          animation: 'slide_from_right',
+        }}
+      >
+        <Stack.Screen
+          name="Login"
+          component={LoginScreen}
+        />
 
-const tabIcon = (name: 'house.fill' | 'qrcode' | 'calendar' | 'hand.raised.fill') => Platform.OS === 'ios'
-  ? { type: 'sfSymbol' as const, name }
-  : { type: 'image' as const, source: require('../../assets/eventflow-mark.png') }
+        <Stack.Screen
+          name="Registro"
+          component={RegisterScreen}
+        />
 
-function GuestTabs() {
-  return <Tab.Navigator screenOptions={{ headerShown: false, tabBarActiveTintColor: '#f56642' }}>
-    <Tab.Screen name="Resumen" component={GuestHomeScreen} options={{ tabBarLabel: 'Inicio', tabBarIcon: tabIcon('house.fill') }} />
-    <Tab.Screen name="Pase" component={EventPassScreen} options={{ tabBarLabel: 'Pase', tabBarIcon: tabIcon('qrcode') }} />
-    <Tab.Screen name="Programa" component={AgendaScreen} options={{ tabBarLabel: 'Agenda', tabBarIcon: tabIcon('calendar') }} />
-    <Tab.Screen name="Ayuda" component={AssistanceScreen} options={{ tabBarLabel: 'Ayuda', tabBarIcon: tabIcon('hand.raised.fill') }} />
-  </Tab.Navigator>
-}
+        <Stack.Screen
+          name="Recuperación"
+          component={ForgotPasswordScreen}
+        />
 
-export function AppNavigator({ hasInvitations }: { hasInvitations: boolean }) {
-  const linking = { prefixes: ['eventflow://'], config: { screens: { Invitación: 'invite/:token' } } }
-  return <NavigationContainer linking={linking}><Stack.Navigator initialRouteName={hasInvitations ? 'Eventos' : 'Invitación'} screenOptions={{ headerShadowVisible: false, headerStyle: { backgroundColor: '#f5f1e9' }, headerTitleStyle: { fontWeight: '700' }, contentStyle: { backgroundColor: '#f5f1e9' } }}>
-    <Stack.Screen name="Invitación" component={GuestAccessScreen} options={{ headerShown: false }} />
-    <Stack.Screen name="Eventos" component={GuestEventsScreen} options={{ headerShown: false }} />
-    <Stack.Screen name="Inicio" component={GuestTabs} options={{ headerShown: false }} />
-    <Stack.Screen name="Confirmar asistencia" component={RsvpScreen} />
-    <Stack.Screen name="Event Pass" component={EventPassScreen} />
-    <Stack.Screen name="Agenda" component={AgendaScreen} />
-    <Stack.Screen name="Avisos" component={NotificationsScreen} />
-    <Stack.Screen name="Asistencia" component={AssistanceScreen} />
-    <Stack.Screen name="Mapa" component={MapScreen} />
-  </Stack.Navigator></NavigationContainer>
+        <Stack.Screen
+          name="Completar registro Google"
+          component={CompleteGoogleRegistrationScreen}
+        />
+
+        <Stack.Screen
+          name="Verificar correo"
+          component={VerifyEmailScreen}
+        />
+
+        <Stack.Screen
+          name="Restablecer contraseña"
+          component={ResetPasswordScreen}
+        />
+
+        <Stack.Screen
+          name="Inicio"
+          component={HomeScreen}
+        />
+
+        <Stack.Screen
+          name="Eventos"
+          component={EventsScreen}
+        />
+
+        <Stack.Screen
+          name="Inicio del evento"
+          component={EventHomeScreen}
+        />
+
+        <Stack.Screen
+          name="Notificaciones"
+          component={NotificationsScreen}
+        />
+
+        <Stack.Screen
+          name="Perfil"
+          component={ProfileScreen}
+        />
+
+        <Stack.Screen
+          name="Información personal"
+          component={PersonalInfoScreen}
+        />
+
+        <Stack.Screen
+          name="Privacidad y seguridad"
+          component={PrivacySecurityScreen}
+        />
+
+        <Stack.Screen
+          name="Mis pases"
+          component={MisPasesScreen}
+        />
+      </Stack.Navigator>
+    </NavigationContainer>
+  )
 }
