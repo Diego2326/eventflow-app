@@ -2,14 +2,17 @@
   "expo": {
     "name": "EventFlow",
     "slug": "eventflow",
+    "scheme": "eventflow",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/eventflow-mark.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.eventflow.mobile"
     },
     "android": {
+      "package": "com.eventflow.mobile",
       "adaptiveIcon": {
         "backgroundColor": "#F5F1E9",
         "foregroundImage": "./assets/eventflow-mark.png",
@@ -20,6 +23,9 @@
     },
     "web": {
       "favicon": "./assets/eventflow-mark.png"
-    }
+    },
+    "plugins": [
+      "@react-native-google-signin/google-signin"
+    ]
   }
 }

@@ -4,15 +4,39 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { LoginScreen } from '../screens/auth/LoginScreen'
 import { RegisterScreen } from '../screens/auth/RegisterScreen'
 import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen'
+import { CompleteGoogleRegistrationScreen } from '../screens/auth/CompleteGoogleRegistrationScreen'
+import { VerifyEmailScreen } from '../screens/auth/VerifyEmailScreen'
+import { ResetPasswordScreen } from '../screens/auth/ResetPasswordScreen'
 
 import { HomeScreen } from '../screens/home/HomeScreen'
 
 import { EventsScreen } from '../screens/events/EventsScreen'
 import { EventHomeScreen } from '../screens/events/EventHomeScreen'
 
+import { NotificationsScreen } from '../screens/notifications/NotificationsScreen'
+
 import { ProfileScreen } from '../screens/profile/ProfileScreen'
 import { PersonalInfoScreen } from '../screens/profile/PersonalInfoScreen'
 import { PrivacySecurityScreen } from '../screens/profile/PrivacySecurityScreen'
+import { MisPasesScreen } from '../screens/profile/MisPasesScreen'
+
+const linking = {
+  prefixes: [
+    'eventflow://',
+  ],
+
+  config: {
+    screens: {
+      'Verificar correo': {
+        path: 'verify-email',
+      },
+
+      'Restablecer contraseña': {
+        path: 'reset-password',
+      },
+    },
+  },
+}
 
 const Stack = createNativeStackNavigator()
 
@@ -22,7 +46,9 @@ export function AppNavigator({
   signedIn: boolean
 }) {
   return (
-    <NavigationContainer>
+    <NavigationContainer
+      linking={linking}
+    >
       <Stack.Navigator
         initialRouteName={
           signedIn
@@ -31,26 +57,19 @@ export function AppNavigator({
         }
         screenOptions={{
           headerShown: false,
-
           headerShadowVisible: false,
-
           headerStyle: {
             backgroundColor: '#F7F7FA',
           },
-
           headerTitleStyle: {
             fontWeight: '700',
           },
-
           contentStyle: {
             backgroundColor: '#F7F7FA',
           },
-
           animation: 'slide_from_right',
         }}
       >
-        {/* AUTENTICACIÓN */}
-
         <Stack.Screen
           name="Login"
           component={LoginScreen}
@@ -66,14 +85,25 @@ export function AppNavigator({
           component={ForgotPasswordScreen}
         />
 
-        {/* INICIO */}
+        <Stack.Screen
+          name="Completar registro Google"
+          component={CompleteGoogleRegistrationScreen}
+        />
+
+        <Stack.Screen
+          name="Verificar correo"
+          component={VerifyEmailScreen}
+        />
+
+        <Stack.Screen
+          name="Restablecer contraseña"
+          component={ResetPasswordScreen}
+        />
 
         <Stack.Screen
           name="Inicio"
           component={HomeScreen}
         />
-
-        {/* EVENTOS */}
 
         <Stack.Screen
           name="Eventos"
@@ -85,7 +115,10 @@ export function AppNavigator({
           component={EventHomeScreen}
         />
 
-        {/* PERFIL */}
+        <Stack.Screen
+          name="Notificaciones"
+          component={NotificationsScreen}
+        />
 
         <Stack.Screen
           name="Perfil"
@@ -100,6 +133,11 @@ export function AppNavigator({
         <Stack.Screen
           name="Privacidad y seguridad"
           component={PrivacySecurityScreen}
+        />
+
+        <Stack.Screen
+          name="Mis pases"
+          component={MisPasesScreen}
         />
       </Stack.Navigator>
     </NavigationContainer>

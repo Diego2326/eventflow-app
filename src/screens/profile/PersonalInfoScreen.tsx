@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -18,7 +19,10 @@ import {
   useSafeAreaInsets,
 } from 'react-native-safe-area-context'
 
-import { DEMO_EMAIL } from '../../services/demo'
+import {
+  getCurrentUser,
+  updateProfile,
+} from '../../services/api'
 
 const NAVY = '#0B1D3A'
 
@@ -32,26 +36,6 @@ const BORDER = '#DDE2EA'
 const MUTED = '#737D91'
 const GREEN = '#26945A'
 const GREEN_SOFT = '#E9F8EF'
-
-function nameFromEmail(email: string) {
-  const localPart = email.split('@')[0] || ''
-
-  const words = localPart
-    .split(/[._-]/)
-    .filter(Boolean)
-
-  if (!words.length) {
-    return ''
-  }
-
-  return words
-    .map(
-      word =>
-        word.charAt(0).toUpperCase() +
-        word.slice(1).toLowerCase(),
-    )
-    .join(' ')
-}
 
 type FieldProps = {
   label: string
@@ -102,7 +86,9 @@ function Field({
           onChangeText={onChangeText}
           keyboardType={keyboardType}
           autoCapitalize={autoCapitalize}
+          autoCorrect={false}
           editable={editable}
+          accessibilityLabel={label}
         />
 
         {rightIcon ? (
@@ -124,86 +110,105 @@ export function PersonalInfoScreen({
 }) {
   const insets = useSafeAreaInsets()
 
-  const defaultName = useMemo(
-    () => nameFromEmail(DEMO_EMAIL),
-    [],
-  )
-
   const [name, setName] =
-    useState(defaultName)
+    useState('')
 
   const [email, setEmail] =
-    useState(DEMO_EMAIL)
+    useState('')
 
-  /*
-   * Estos datos NO existen todavía en nuestra
-   * información real, así que empiezan vacíos.
-   */
   const [phone, setPhone] =
-    useState('')
-
-  const [birthDate, setBirthDate] =
-    useState('')
-
-  const [country, setCountry] =
     useState('')
 
   const [changed, setChanged] =
     useState(false)
+
+  const [loading, setLoading] =
+    useState(true)
+
+  const [saving, setSaving] =
+    useState(false)
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadProfile() {
+      try {
+        const currentUser =
+          await getCurrentUser()
+
+        if (
+          !mounted ||
+          !currentUser
+        ) {
+          return
+        }
+
+        const normalizedPhone =
+          currentUser.phone
+            .replace(/\D/g, '')
+            .replace(/^502/, '')
+            .slice(-8)
+
+        setName(
+          currentUser.name ?? '',
+        )
+        setEmail(
+          currentUser.email ?? '',
+        )
+        setPhone(
+          normalizedPhone,
+        )
+      } catch (error) {
+        if (!mounted) return
+
+        Alert.alert(
+          'No fue posible cargar el perfil',
+          (error as Error).message,
+        )
+      } finally {
+        if (mounted) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void loadProfile()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   function updateName(value: string) {
     setName(value)
     setChanged(true)
   }
 
-  function updateEmail(value: string) {
-    setEmail(value)
-    setChanged(true)
-  }
-
   function updatePhone(value: string) {
     setPhone(
-      value.replace(
-        /[^0-9+\s]/g,
-        '',
-      ),
+      value
+        .replace(/\D/g, '')
+        .slice(0, 8),
     )
     setChanged(true)
-  }
-
-  function updateBirthDate(
-    value: string,
-  ) {
-    setBirthDate(
-      value.replace(
-        /[^0-9/]/g,
-        '',
-      ),
-    )
-    setChanged(true)
-  }
-
-  function updateCountry(value: string) {
-    setCountry(value)
-    setChanged(true)
-  }
-
-  function changePhoto() {
-    Alert.alert(
-      'Cambiar foto',
-      'La selección de fotografía se conectará cuando agreguemos el selector de imágenes.',
-    )
   }
 
   function changePassword() {
-    Alert.alert(
-      'Cambiar contraseña',
-      'Conectaremos esta opción con el flujo de seguridad de EventFlow.',
+    navigation.navigate(
+      'Privacidad y seguridad',
     )
   }
 
-  function save() {
-    if (!name.trim()) {
+  async function save() {
+    if (saving) return
+
+    const cleanName =
+      name.trim()
+
+    const cleanPhone =
+      phone.replace(/\D/g, '')
+
+    if (!cleanName) {
       Alert.alert(
         'Nombre requerido',
         'Ingresa tu nombre para continuar.',
@@ -211,24 +216,70 @@ export function PersonalInfoScreen({
       return
     }
 
-    if (!email.trim()) {
+    if (
+      cleanPhone &&
+      cleanPhone.length !== 8
+    ) {
       Alert.alert(
-        'Correo requerido',
-        'Ingresa tu correo electrónico.',
+        'Teléfono inválido',
+        'El número de teléfono debe tener 8 dígitos.',
       )
       return
     }
 
-    /*
-     * No inventamos un endpoint de actualización
-     * porque todavía no tenemos uno confirmado.
-     */
-    Alert.alert(
-      'Perfil preparado',
-      'Los datos son válidos. Falta conectar esta pantalla al endpoint de actualización del perfil para guardarlos permanentemente.',
-    )
+    if (!changed) {
+      Alert.alert(
+        'Sin cambios',
+        'No has modificado tu información personal.',
+      )
+      return
+    }
 
-    setChanged(false)
+    setSaving(true)
+
+    try {
+      const updated =
+        await updateProfile({
+          name: cleanName,
+          phone: cleanPhone
+            ? `+502${cleanPhone}`
+            : '',
+        })
+
+      setName(
+        updated.name ??
+          cleanName,
+      )
+
+      setEmail(
+        updated.email ??
+          email,
+      )
+
+      setPhone(
+        (
+          updated.phone ??
+          cleanPhone
+        )
+          .replace(/\D/g, '')
+          .replace(/^502/, '')
+          .slice(-8),
+      )
+
+      setChanged(false)
+
+      Alert.alert(
+        'Perfil actualizado',
+        'Tu información personal fue guardada correctamente.',
+      )
+    } catch (error) {
+      Alert.alert(
+        'No fue posible guardar',
+        (error as Error).message,
+      )
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -300,6 +351,27 @@ export function PersonalInfoScreen({
             Administra tus datos de cuenta
           </Text>
 
+          {loading ? (
+            <View
+              style={
+                styles.loadingBox
+              }
+            >
+              <ActivityIndicator
+                size="small"
+                color={PURPLE}
+              />
+
+              <Text
+                style={
+                  styles.loadingText
+                }
+              >
+                Cargando información…
+              </Text>
+            </View>
+          ) : null}
+
           {/* PERFIL */}
           <View style={styles.profileCard}>
             <View style={styles.avatarRing}>
@@ -328,28 +400,7 @@ export function PersonalInfoScreen({
               </Text>
             </View>
 
-            <Pressable
-              style={({ pressed }) => [
-                styles.photoButton,
-                pressed &&
-                  styles.pressed,
-              ]}
-              onPress={changePhoto}
-            >
-              <Feather
-                name="camera"
-                size={18}
-                color={PURPLE}
-              />
 
-              <Text
-                style={
-                  styles.photoButtonText
-                }
-              >
-                Cambiar foto
-              </Text>
-            </Pressable>
           </View>
 
           {/* DATOS */}
@@ -364,16 +415,24 @@ export function PersonalInfoScreen({
               value={name}
               onChangeText={updateName}
               autoCapitalize="words"
+              editable={
+                !loading && !saving
+              }
             />
 
             <Field
               label="Correo electrónico"
-              placeholder="Agregar correo"
+              placeholder="Correo principal"
               value={email}
-              onChangeText={updateEmail}
+              onChangeText={() => {}}
               keyboardType="email-address"
               autoCapitalize="none"
+              editable={false}
             />
+
+            <Text style={styles.emailHelp}>
+              Para cambiar el correo principal se requiere verificar la nueva dirección antes de sustituir la actual.
+            </Text>
 
             <Field
               label="Teléfono"
@@ -381,28 +440,11 @@ export function PersonalInfoScreen({
               value={phone}
               onChangeText={updatePhone}
               keyboardType="phone-pad"
+              editable={
+                !loading && !saving
+              }
             />
 
-            <Field
-              label="Fecha de nacimiento"
-              placeholder="DD/MM/AAAA"
-              value={birthDate}
-              onChangeText={
-                updateBirthDate
-              }
-              keyboardType="numeric"
-              rightIcon="calendar"
-            />
-
-            <Field
-              label="País / región"
-              placeholder="Agregar país / región"
-              value={country}
-              onChangeText={
-                updateCountry
-              }
-              autoCapitalize="words"
-            />
           </View>
 
           {/* SEGURIDAD */}
@@ -418,6 +460,8 @@ export function PersonalInfoScreen({
                   styles.rowPressed,
               ]}
               onPress={changePassword}
+              accessibilityRole="button"
+              accessibilityLabel="Cambiar contraseña"
             >
               <View
                 style={
@@ -473,27 +517,21 @@ export function PersonalInfoScreen({
 
               <View
                 style={
-                  styles.verifiedBadge
+                  styles.pendingBadge
                 }
               >
-                <View
-                  style={
-                    styles.verifiedIcon
-                  }
-                >
-                  <Feather
-                    name="check"
-                    size={12}
-                    color={WHITE}
-                  />
-                </View>
+                <Feather
+                  name="info"
+                  size={14}
+                  color={PURPLE}
+                />
 
                 <Text
                   style={
-                    styles.verifiedText
+                    styles.pendingText
                   }
                 >
-                  Verificado
+                  Sin confirmar
                 </Text>
               </View>
             </View>
@@ -502,11 +540,30 @@ export function PersonalInfoScreen({
           {/* GUARDAR */}
           <Pressable
             onPress={save}
+            disabled={
+              loading ||
+              saving ||
+              !changed
+            }
+            accessibilityRole="button"
+            accessibilityLabel="Guardar cambios de información personal"
+            accessibilityState={{
+              disabled:
+                loading ||
+                saving ||
+                !changed,
+              busy: saving,
+            }}
             style={({ pressed }) => [
               styles.saveWrapper,
               pressed &&
+                !saving &&
                 styles.pressed,
-              !changed &&
+              (
+                loading ||
+                saving ||
+                !changed
+              ) &&
                 styles.saveUnchanged,
             ]}
           >
@@ -525,13 +582,20 @@ export function PersonalInfoScreen({
               }}
               style={styles.saveButton}
             >
-              <Text
-                style={
-                  styles.saveButtonText
-                }
-              >
-                Guardar cambios
-              </Text>
+              {saving ? (
+                <ActivityIndicator
+                  size="small"
+                  color={WHITE}
+                />
+              ) : (
+                <Text
+                  style={
+                    styles.saveButtonText
+                  }
+                >
+                  Guardar cambios
+                </Text>
+              )}
             </LinearGradient>
           </Pressable>
 
@@ -609,9 +673,8 @@ export function PersonalInfoScreen({
           <Pressable
             style={styles.navItem}
             onPress={() =>
-              Alert.alert(
+              navigation.navigate(
                 'Notificaciones',
-                'Esta sección estará disponible próximamente.',
               )
             }
           >
@@ -739,6 +802,23 @@ const styles = StyleSheet.create({
   },
 
   /* PERFIL */
+
+  loadingBox: {
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
+    marginBottom: 12,
+    borderRadius: 13,
+    backgroundColor: PURPLE_SOFT,
+  },
+
+  loadingText: {
+    color: MUTED,
+    fontSize: 11.5,
+    fontWeight: '600',
+  },
 
   profileCard: {
     minHeight: 132,
@@ -896,6 +976,15 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
   },
 
+  emailHelp: {
+    color: MUTED,
+    fontSize: 10.5,
+    lineHeight: 16,
+    marginTop: -2,
+    marginBottom: 12,
+    paddingHorizontal: 2,
+  },
+
   /* SEGURIDAD */
 
   securityCard: {
@@ -942,41 +1031,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#F7F7FA',
   },
 
-  verifiedBadge: {
+  pendingBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-
-    gap: 7,
-
+    gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
-
-    borderRadius: 16,
-
-    backgroundColor: GREEN_SOFT,
+    borderRadius: 14,
+    backgroundColor: PURPLE_SOFT,
   },
 
-  verifiedIcon: {
-    width: 20,
-    height: 20,
-
-    borderRadius: 10,
-
-    alignItems: 'center',
-    justifyContent: 'center',
-
-    backgroundColor: GREEN,
-  },
-
-  verifiedText: {
-    color: GREEN,
-
-    fontSize: 11,
-
+  pendingText: {
+    color: PURPLE,
+    fontSize: 10.5,
     fontWeight: '700',
   },
-
-  /* BOTONES */
 
   saveWrapper: {
     marginTop: 22,

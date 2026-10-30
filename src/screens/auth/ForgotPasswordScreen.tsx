@@ -18,7 +18,9 @@ import {
   useSafeAreaInsets,
 } from 'react-native-safe-area-context'
 
-import { request } from '../../services/api'
+import {
+  forgotPassword,
+} from '../../services/api'
 
 const NAVY = '#0B1D3A'
 
@@ -33,6 +35,14 @@ const BORDER = '#DDE2EA'
 const MUTED = '#737D91'
 const ERROR = '#B74C43'
 const SUCCESS = '#287846'
+
+function isValidEmail(
+  value: string,
+) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+    value.trim(),
+  )
+}
 
 export function ForgotPasswordScreen({
   navigation,
@@ -56,7 +66,8 @@ export function ForgotPasswordScreen({
   async function submit() {
     if (loading) return
 
-    const value = identifier.trim()
+    const value =
+      identifier.trim().toLowerCase()
 
     setError('')
     setMessage('')
@@ -68,35 +79,35 @@ export function ForgotPasswordScreen({
       return
     }
 
-    /*
-     * El endpoint actual de EventFlow recibe email.
-     * Dejamos el diseño preparado para correo/teléfono,
-     * pero evitamos enviar un teléfono como si fuera email.
-     */
-    if (!value.includes('@')) {
+    if (!isValidEmail(value)) {
       setError(
-        'Por ahora la recuperación está disponible mediante correo electrónico.',
+        'Ingresa un correo electrónico válido.',
       )
       return
     }
 
+    const genericMessage =
+      'Si existe una cuenta asociada a ese correo, recibirás instrucciones para recuperar tu acceso.'
+
     setLoading(true)
 
     try {
-      await request(
-        '/auth/forgot-password',
-        'POST',
-        {
-          email: value,
-        },
+      await forgotPassword(
+        value,
       )
 
       setMessage(
-        'Si existe una cuenta asociada, recibirás instrucciones para recuperar tu acceso.',
+        genericMessage,
       )
-    } catch (error) {
+    } catch {
+      /*
+       * No exponemos mensajes del backend que puedan
+       * permitir inferir si el correo pertenece a una
+       * cuenta. Un fallo técnico se comunica de forma
+       * independiente de la existencia del usuario.
+       */
       setError(
-        (error as Error).message,
+        'No fue posible procesar la solicitud. Verifica tu conexión e inténtalo nuevamente.',
       )
     } finally {
       setLoading(false)
@@ -104,13 +115,6 @@ export function ForgotPasswordScreen({
   }
 
   async function resend() {
-    if (!identifier.trim()) {
-      setError(
-        'Ingresa tu correo electrónico primero.',
-      )
-      return
-    }
-
     await submit()
   }
 
@@ -176,8 +180,8 @@ export function ForgotPasswordScreen({
             </Text>
 
             <Text style={styles.subtitle}>
-              Ingresa tu correo o teléfono y te enviaremos
-              un código para recuperar tu cuenta.
+              Ingresa tu correo electrónico y te enviaremos
+              instrucciones para recuperar tu cuenta.
             </Text>
           </View>
 
@@ -208,7 +212,7 @@ export function ForgotPasswordScreen({
 
             <TextInput
               style={styles.input}
-              placeholder="Correo electrónico o teléfono"
+              placeholder="Correo electrónico"
               placeholderTextColor={MUTED}
               value={identifier}
               onChangeText={value => {
@@ -219,15 +223,22 @@ export function ForgotPasswordScreen({
               editable={!loading}
               autoCapitalize="none"
               autoCorrect={false}
+              autoComplete="email"
+              textContentType="emailAddress"
               keyboardType="email-address"
               returnKeyType="done"
               onSubmitEditing={submit}
+              accessibilityLabel="Correo electrónico"
             />
           </View>
 
           {/* ERROR */}
           {error ? (
-            <View style={styles.errorBox}>
+            <View
+              style={styles.errorBox}
+              accessibilityRole="alert"
+              accessibilityLiveRegion="polite"
+            >
               <Feather
                 name="alert-circle"
                 size={18}
@@ -242,7 +253,11 @@ export function ForgotPasswordScreen({
 
           {/* SUCCESS */}
           {message ? (
-            <View style={styles.successBox}>
+            <View
+              style={styles.successBox}
+              accessibilityRole="alert"
+              accessibilityLiveRegion="polite"
+            >
               <Feather
                 name="check-circle"
                 size={18}
@@ -259,6 +274,12 @@ export function ForgotPasswordScreen({
           <Pressable
             onPress={submit}
             disabled={loading}
+            accessibilityRole="button"
+            accessibilityLabel="Enviar instrucciones de recuperación"
+            accessibilityState={{
+              disabled: loading,
+              busy: loading,
+            }}
             style={({ pressed }) => [
               styles.primaryButtonWrapper,
               pressed &&
@@ -294,7 +315,7 @@ export function ForgotPasswordScreen({
                       styles.primaryButtonText
                     }
                   >
-                    Enviar código
+                    Enviar instrucciones
                   </Text>
 
                   <Feather
@@ -312,9 +333,14 @@ export function ForgotPasswordScreen({
             style={styles.resendButton}
             onPress={resend}
             disabled={loading}
+            accessibilityRole="button"
+            accessibilityLabel="Reenviar instrucciones"
+            accessibilityState={{
+              disabled: loading,
+            }}
           >
             <Text style={styles.resendText}>
-              No recibí el código
+              Reenviar instrucciones
             </Text>
           </Pressable>
 
@@ -340,6 +366,11 @@ export function ForgotPasswordScreen({
               navigation.replace('Login')
             }
             disabled={loading}
+            accessibilityRole="button"
+            accessibilityLabel="Volver a iniciar sesión"
+            accessibilityState={{
+              disabled: loading,
+            }}
           >
             <Feather
               name="user"

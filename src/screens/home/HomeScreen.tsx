@@ -7,7 +7,6 @@ import {
 
 import {
   ActivityIndicator,
-  Alert,
   ImageBackground,
   Pressable,
   RefreshControl,
@@ -26,8 +25,11 @@ import {
   useSafeAreaInsets,
 } from 'react-native-safe-area-context'
 
-import { api } from '../../services/api'
-import type { EventItem } from '../../types/events'
+import {
+  getEvents,
+  getPasses,
+} from '../../services/api'
+import type { EventItem, EventPass } from '../../types/events'
 
 const NAVY = '#0B1D3A'
 const NAVY_SOFT = '#173456'
@@ -69,6 +71,9 @@ export function HomeScreen({
   const [events, setEvents] =
     useState<EventItem[] | null>(null)
 
+  const [passes, setPasses] =
+    useState<EventPass[] | null>(null)
+
   const [error, setError] =
     useState('')
 
@@ -84,10 +89,16 @@ export function HomeScreen({
       setError('')
 
       try {
-        const result =
-          await api<EventItem[]>('/events')
+        const [
+          eventData,
+          passData,
+        ] = await Promise.all([
+          getEvents(),
+          getPasses(),
+        ])
 
-        setEvents(result)
+        setEvents(eventData)
+        setPasses(passData)
       } catch (error) {
         setError(
           (error as Error).message,
@@ -124,13 +135,21 @@ export function HomeScreen({
         getDate(event).getTime() < now,
     )
 
+    const activePasses =
+      passes?.filter(
+        pass =>
+          pass.status === 'ACTIVE' ||
+          pass.status === 'PENDING',
+      ).length ?? 0
+
     return {
       total: sorted.length,
       upcoming,
       previous,
+      activePasses,
       nextEvent: upcoming[0] ?? null,
     }
-  }, [events])
+  }, [events, passes])
 
   function openEvent(event: EventItem) {
     navigation.navigate(
@@ -138,13 +157,6 @@ export function HomeScreen({
       {
         event,
       },
-    )
-  }
-
-  function comingSoon(name: string) {
-    Alert.alert(
-      name,
-      'Estamos preparando esta sección.',
     )
   }
 
@@ -168,7 +180,7 @@ export function HomeScreen({
           <Pressable
             style={styles.headerIcon}
             onPress={() =>
-              comingSoon('Notificaciones')
+              navigation.navigate('Notificaciones')
             }
           >
             <Feather
@@ -480,23 +492,30 @@ export function HomeScreen({
               </Text>
             </View>
 
-            <View style={styles.statCard}>
+            <Pressable
+              style={styles.statCard}
+              onPress={() =>
+                navigation.navigate('Mis pases')
+              }
+            >
               <View style={styles.statIcon}>
                 <Feather
-                  name="layers"
+                  name="credit-card"
                   size={23}
                   color={PURPLE}
                 />
               </View>
 
               <Text style={styles.statNumber}>
-                {summary.total}
+                {passes === null
+                  ? '—'
+                  : summary.activePasses}
               </Text>
 
               <Text style={styles.statLabel}>
-                Total
+                Pases
               </Text>
-            </View>
+            </Pressable>
           </View>
 
           {/* ACCESOS */}
@@ -545,7 +564,7 @@ export function HomeScreen({
                 pressed && styles.pressed,
               ]}
               onPress={() =>
-                comingSoon('Notificaciones')
+                navigation.navigate('Notificaciones')
               }
             >
               <View style={styles.quickIcon}>
@@ -662,7 +681,7 @@ export function HomeScreen({
         <Pressable
           style={styles.navItem}
           onPress={() =>
-            comingSoon('Notificaciones')
+            navigation.navigate('Notificaciones')
           }
         >
           <Feather

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  Alert,
+  ActivityIndicator,
   Image,
   ImageBackground,
   KeyboardAvoidingView,
@@ -18,11 +18,42 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Feather, FontAwesome } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { login } from '../../services/api'
 import {
-  DEMO_EMAIL,
-  DEMO_PASSWORD,
-} from '../../services/demo'
+  login,
+} from '../../services/api'
+import {
+  signInWithGoogle,
+} from '../../services/googleAuth'
+
+function validateIdentifier(
+  value: string,
+) {
+  const clean = value.trim()
+
+  if (!clean) {
+    return 'Ingresa tu correo o teléfono.'
+  }
+
+  if (clean.includes('@')) {
+    const emailPattern =
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+    if (!emailPattern.test(clean)) {
+      return 'Ingresa un correo electrónico válido.'
+    }
+
+    return ''
+  }
+
+  const digits =
+    clean.replace(/\D/g, '')
+
+  if (digits.length < 8) {
+    return 'Ingresa un número de teléfono válido.'
+  }
+
+  return ''
+}
 
 export function LoginScreen({
   navigation,
@@ -33,10 +64,10 @@ export function LoginScreen({
   const { height } = useWindowDimensions()
 
   const [identifier, setIdentifier] =
-    useState(DEMO_EMAIL)
+    useState('')
 
   const [password, setPassword] =
-    useState(DEMO_PASSWORD)
+    useState('')
 
   const [showPassword, setShowPassword] =
     useState(false)
@@ -60,9 +91,29 @@ export function LoginScreen({
   async function submit() {
     if (loading) return
 
-    if (!identifier.trim() || !password) {
+    const cleanIdentifier =
+      identifier.trim()
+
+    const identifierError =
+      validateIdentifier(
+        cleanIdentifier,
+      )
+
+    if (identifierError) {
+      setError(identifierError)
+      return
+    }
+
+    if (!password) {
       setError(
-        'Ingresa tu correo o teléfono y contraseña.',
+        'Ingresa tu contraseña.',
+      )
+      return
+    }
+
+    if (password.length < 6) {
+      setError(
+        'La contraseña debe tener al menos 6 caracteres.',
       )
       return
     }
@@ -72,11 +123,11 @@ export function LoginScreen({
 
     try {
       await login(
-        identifier.trim(),
+        cleanIdentifier,
         password,
       )
 
-      navigation.replace('Eventos')
+      navigation.replace('Inicio')
     } catch (error) {
       setError(
         (error as Error).message,
@@ -86,11 +137,48 @@ export function LoginScreen({
     }
   }
 
-  function googleLogin() {
-    Alert.alert(
-      'Continuar con Google',
-      'La integración con Google se conectará posteriormente.',
-    )
+  async function googleLogin() {
+    if (loading) return
+
+    setError('')
+    setLoading(true)
+
+    try {
+      const result =
+        await signInWithGoogle()
+
+      if (
+        result.status ===
+        'CANCELLED'
+      ) {
+        return
+      }
+
+      if (
+        result.status ===
+        'PROFILE_REQUIRED'
+      ) {
+        navigation.navigate(
+          'Completar registro Google',
+          {
+            registrationToken:
+              result.registrationToken,
+            email: result.email,
+            name:
+              result.name ?? '',
+          },
+        )
+        return
+      }
+
+      navigation.replace('Inicio')
+    } catch (error) {
+      setError(
+        (error as Error).message,
+      )
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -254,8 +342,12 @@ export function LoginScreen({
                 placeholderTextColor="#75839A"
                 autoCapitalize="none"
                 autoCorrect={false}
+                autoComplete="username"
+                textContentType="username"
+                keyboardType="email-address"
                 editable={!loading}
                 returnKeyType="next"
+                accessibilityLabel="Correo o teléfono"
               />
             </View>
 
@@ -278,9 +370,12 @@ export function LoginScreen({
                 placeholder="Contraseña"
                 placeholderTextColor="#75839A"
                 secureTextEntry={!showPassword}
+                autoComplete="current-password"
+                textContentType="password"
                 editable={!loading}
                 returnKeyType="done"
                 onSubmitEditing={submit}
+                accessibilityLabel="Contraseña"
               />
 
               <Pressable
@@ -291,6 +386,12 @@ export function LoginScreen({
                   )
                 }
                 hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  showPassword
+                    ? 'Ocultar contraseña'
+                    : 'Mostrar contraseña'
+                }
               >
                 <Feather
                   name={
@@ -314,6 +415,8 @@ export function LoginScreen({
                 )
               }
               disabled={loading}
+              accessibilityRole="button"
+              accessibilityLabel="Recuperar contraseña"
             >
               <Text style={styles.forgotText}>
                 ¿Olvidaste tu contraseña?
@@ -323,7 +426,11 @@ export function LoginScreen({
             {/* ERROR */}
 
             {error ? (
-              <View style={styles.errorContainer}>
+              <View
+                style={styles.errorContainer}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="polite"
+              >
                 <Feather
                   name="alert-circle"
                   size={17}
@@ -341,6 +448,12 @@ export function LoginScreen({
             <Pressable
               disabled={loading}
               onPress={submit}
+              accessibilityRole="button"
+              accessibilityLabel="Iniciar sesión"
+              accessibilityState={{
+                disabled: loading,
+                busy: loading,
+              }}
               style={({ pressed }) => [
                 styles.primaryButtonShadow,
 
@@ -367,6 +480,13 @@ export function LoginScreen({
                 }}
                 style={styles.primaryButton}
               >
+                {loading ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#FFFFFF"
+                  />
+                ) : null}
+
                 <Text style={styles.primaryButtonText}>
                   {loading
                     ? 'Ingresando...'
@@ -405,6 +525,12 @@ export function LoginScreen({
                   styles.googlePressed,
               ]}
               onPress={googleLogin}
+              disabled={loading}
+              accessibilityRole="button"
+              accessibilityLabel="Continuar con Google"
+              accessibilityState={{
+                disabled: loading,
+              }}
             >
               <FontAwesome
                 name="google"
@@ -431,6 +557,9 @@ export function LoginScreen({
                     'Registro',
                   )
                 }
+                disabled={loading}
+                accessibilityRole="button"
+                accessibilityLabel="Crear cuenta"
               >
                 <Text style={styles.registerLink}>
                   Crear cuenta

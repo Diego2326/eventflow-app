@@ -18,8 +18,11 @@ import {
   useSafeAreaInsets,
 } from 'react-native-safe-area-context'
 
-import { api } from '../../services/api'
-import type { EventItem } from '../../types/events'
+import {
+  getEvents,
+  getRsvps,
+} from '../../services/api'
+import type { EventItem, EventRSVP } from '../../types/events'
 
 const NAVY = '#0B1D3A'
 const NAVY_SOFT = '#173456'
@@ -95,12 +98,14 @@ function formatMonth(value: string) {
 type EventCardProps = {
   event: EventItem
   past?: boolean
+  rsvp?: EventRSVP
   onPress: () => void
 }
 
 function EventCard({
   event,
   past = false,
+  rsvp,
   onPress,
 }: EventCardProps) {
   return (
@@ -165,6 +170,36 @@ function EventCard({
           </View>
         </View>
 
+        {rsvp ? (
+          <View
+            style={[
+              styles.rsvpBadge,
+              rsvp.status === 'CONFIRMED'
+                ? styles.rsvpConfirmed
+                : rsvp.status === 'DECLINED'
+                  ? styles.rsvpDeclined
+                  : styles.rsvpPending,
+            ]}
+          >
+            <Text
+              style={[
+                styles.rsvpBadgeText,
+                rsvp.status === 'CONFIRMED'
+                  ? styles.rsvpConfirmedText
+                  : rsvp.status === 'DECLINED'
+                    ? styles.rsvpDeclinedText
+                    : styles.rsvpPendingText,
+              ]}
+            >
+              {rsvp.status === 'CONFIRMED'
+                ? 'Asistencia confirmada'
+                : rsvp.status === 'DECLINED'
+                  ? 'No asistiré'
+                  : 'RSVP pendiente'}
+            </Text>
+          </View>
+        ) : null}
+
         <View
           style={[
             styles.statusBadge,
@@ -217,6 +252,9 @@ export function EventsScreen({
   const [items, setItems] =
     useState<EventItem[] | null>(null)
 
+  const [rsvps, setRsvps] =
+    useState<EventRSVP[]>([])
+
   const [error, setError] =
     useState('')
 
@@ -232,10 +270,16 @@ export function EventsScreen({
       setError('')
 
       try {
-        const result =
-          await api<EventItem[]>('/events')
+        const [
+          eventData,
+          rsvpData,
+        ] = await Promise.all([
+          getEvents(),
+          getRsvps(),
+        ])
 
-        setItems(result)
+        setItems(eventData)
+        setRsvps(rsvpData)
       } catch (error) {
         setError(
           (error as Error).message,
@@ -279,6 +323,15 @@ export function EventsScreen({
   const remainingUpcoming =
     upcomingEvents.slice(1)
 
+  function rsvpFor(
+    eventId: string,
+  ) {
+    return rsvps.find(
+      item =>
+        item.eventId === eventId,
+    )
+  }
+
   function openEvent(event: EventItem) {
     navigation.navigate(
       'Inicio del evento',
@@ -319,7 +372,9 @@ export function EventsScreen({
           <Pressable
             style={styles.headerIconButton}
             onPress={() =>
-              comingSoon('Notificaciones')
+              navigation.navigate(
+                'Notificaciones',
+              )
             }
           >
             <Feather
@@ -564,6 +619,45 @@ export function EventsScreen({
                       styles.featuredFooter
                     }
                   >
+                    {rsvpFor(
+                      featuredEvent.id,
+                    ) ? (
+                      <View
+                        style={[
+                          styles.featuredRsvpBadge,
+                          rsvpFor(
+                            featuredEvent.id,
+                          )?.status ===
+                            'CONFIRMED'
+                            ? styles.featuredRsvpConfirmed
+                            : rsvpFor(
+                                  featuredEvent.id,
+                                )?.status ===
+                                'DECLINED'
+                              ? styles.featuredRsvpDeclined
+                              : styles.featuredRsvpPending,
+                        ]}
+                      >
+                        <Text
+                          style={
+                            styles.featuredRsvpText
+                          }
+                        >
+                          {rsvpFor(
+                            featuredEvent.id,
+                          )?.status ===
+                          'CONFIRMED'
+                            ? 'Confirmado'
+                            : rsvpFor(
+                                  featuredEvent.id,
+                                )?.status ===
+                                'DECLINED'
+                              ? 'No asistiré'
+                              : 'RSVP pendiente'}
+                        </Text>
+                      </View>
+                    ) : null}
+
                     <View
                       style={
                         styles.programmedBadge
@@ -643,6 +737,9 @@ export function EventsScreen({
                     <EventCard
                       key={event.id}
                       event={event}
+                      rsvp={rsvpFor(
+                        event.id,
+                      )}
                       onPress={() =>
                         openEvent(event)
                       }
@@ -682,6 +779,9 @@ export function EventsScreen({
                       key={event.id}
                       event={event}
                       past
+                      rsvp={rsvpFor(
+                        event.id,
+                      )}
                       onPress={() =>
                         openEvent(event)
                       }
@@ -770,7 +870,7 @@ export function EventsScreen({
         <Pressable
           style={styles.navItem}
           onPress={() =>
-            comingSoon(
+            navigation.navigate(
               'Notificaciones',
             )
           }
@@ -995,6 +1095,33 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
 
+  featuredRsvpBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 18,
+  },
+
+  featuredRsvpConfirmed: {
+    backgroundColor:
+      'rgba(36,155,104,0.80)',
+  },
+
+  featuredRsvpPending: {
+    backgroundColor:
+      'rgba(104,72,231,0.86)',
+  },
+
+  featuredRsvpDeclined: {
+    backgroundColor:
+      'rgba(214,69,80,0.82)',
+  },
+
+  featuredRsvpText: {
+    color: WHITE,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+
   programmedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1141,6 +1268,43 @@ const styles = StyleSheet.create({
   metaText: {
     color: '#687287',
     fontSize: 10.5,
+  },
+
+  rsvpBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginTop: 7,
+    borderRadius: 12,
+  },
+
+  rsvpConfirmed: {
+    backgroundColor: '#EAF8F1',
+  },
+
+  rsvpPending: {
+    backgroundColor: PURPLE_SOFT,
+  },
+
+  rsvpDeclined: {
+    backgroundColor: '#FFF0F1',
+  },
+
+  rsvpBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '700',
+  },
+
+  rsvpConfirmedText: {
+    color: '#249B68',
+  },
+
+  rsvpPendingText: {
+    color: PURPLE,
+  },
+
+  rsvpDeclinedText: {
+    color: '#D64550',
   },
 
   statusBadge: {

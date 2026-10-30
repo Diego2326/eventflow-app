@@ -20,10 +20,22 @@ import {
   useSafeAreaInsets,
 } from 'react-native-safe-area-context'
 
-import { api } from '../../services/api'
+import {
+  getEventAgenda,
+  getEventCapacity,
+  getEventModules,
+  getEventRsvp,
+  getPasses,
+  updateEventRsvp,
+} from '../../services/api'
 import type {
+  EventAgenda,
+  EventCapacity,
   EventItem,
   EventModule,
+  EventPass,
+  EventRSVP,
+  RSVPStatus,
 } from '../../types/events'
 
 const NAVY = '#0B1D3A'
@@ -36,30 +48,7 @@ const WHITE = '#FFFFFF'
 const SOFT = '#F7F8FA'
 const BORDER = '#E9EBEF'
 const MUTED = '#747C8E'
-
-type Activity = {
-  time: string
-  title: string
-  detail: string
-}
-
-const DEMO_ACTIVITIES: Activity[] = [
-  {
-    time: '10:00 a. m.',
-    title: 'El poder de las ideas',
-    detail: 'Lucía Torres',
-  },
-  {
-    time: '11:30 a. m.',
-    title: 'Creatividad en la era IA',
-    detail: 'Diego Ramírez',
-  },
-  {
-    time: '1:00 p. m.',
-    title: 'Panel: El futuro creativo',
-    detail: 'Ana Martínez, Carlos Vega',
-  },
-]
+const DANGER = '#D64550'
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString('es-GT', {
@@ -114,19 +103,227 @@ export function EventHomeScreen({
   const [error, setError] =
     useState('')
 
+  const [passes, setPasses] =
+    useState<EventPass[] | null>(null)
+
+  const [rsvp, setRsvp] =
+    useState<EventRSVP | null>(null)
+
+  const [capacity, setCapacity] =
+    useState<EventCapacity | null>(null)
+
+  const [agenda, setAgenda] =
+    useState<EventAgenda | null>(null)
+
+  const [
+    agendaLoading,
+    setAgendaLoading,
+  ] = useState(true)
+
+  const [
+    agendaError,
+    setAgendaError,
+  ] = useState('')
+
+  const [rsvpLoading, setRsvpLoading] =
+    useState(true)
+
+  const [rsvpSaving, setRsvpSaving] =
+    useState(false)
+
+  const eventPass =
+    passes?.find(
+      pass =>
+        pass.eventId === event.id,
+    ) ?? null
+
   useEffect(() => {
     setError('')
+    setModules(null)
 
-    api<EventModule[]>(
-      `/events/${event.id}/modules/navigation`,
-    )
+    getEventModules(event.id)
       .then(setModules)
       .catch(error => {
+        setModules([])
         setError(
           (error as Error).message,
         )
       })
   }, [event.id])
+
+  useEffect(() => {
+    setPasses(null)
+
+    getPasses()
+      .then(setPasses)
+      .catch(() => {
+        setPasses([])
+      })
+  }, [event.id])
+
+  useEffect(() => {
+    setRsvpLoading(true)
+
+    Promise.all([
+      getEventRsvp(event.id),
+      getEventCapacity(event.id),
+    ])
+      .then(
+        ([
+          rsvpData,
+          capacityData,
+        ]) => {
+          setRsvp(rsvpData)
+          setCapacity(capacityData)
+        },
+      )
+      .catch(() => {
+        setRsvp(null)
+        setCapacity(null)
+      })
+      .finally(() => {
+        setRsvpLoading(false)
+      })
+  }, [event.id])
+
+  useEffect(() => {
+    let mounted = true
+
+    setAgenda(null)
+    setAgendaError('')
+    setAgendaLoading(true)
+
+    getEventAgenda(event.id)
+      .then(data => {
+        if (!mounted) return
+        setAgenda(data)
+      })
+      .catch(error => {
+        if (!mounted) return
+
+        setAgenda(null)
+        setAgendaError(
+          (error as Error).message,
+        )
+      })
+      .finally(() => {
+        if (mounted) {
+          setAgendaLoading(false)
+        }
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [event.id])
+
+  function openEventPass() {
+    if (passes === null) {
+      Alert.alert(
+        'Tu pase',
+        'Estamos cargando la información de tu pase.',
+      )
+
+      return
+    }
+
+    if (!eventPass) {
+      Alert.alert(
+        'Tu pase',
+        'Todavía no hay un pase asociado a este evento.',
+      )
+
+      return
+    }
+
+    navigation.navigate('Mis pases')
+  }
+
+  async function updateRsvp(
+    status: RSVPStatus,
+    companions =
+      rsvp?.companions ?? 0,
+  ) {
+    if (!rsvp) {
+      Alert.alert(
+        'RSVP no disponible',
+        'No pudimos cargar la información de tu invitación.',
+      )
+
+      return
+    }
+
+    const nextCompanions =
+      status === 'DECLINED'
+        ? 0
+        : companions
+
+    setRsvpSaving(true)
+
+    try {
+      const updated =
+        await updateEventRsvp(
+          event.id,
+          {
+            status,
+            companions:
+              nextCompanions,
+          },
+        )
+
+      setRsvp(updated)
+
+      Alert.alert(
+        status === 'CONFIRMED'
+          ? 'Asistencia confirmada'
+          : status === 'DECLINED'
+            ? 'Respuesta actualizada'
+            : 'RSVP actualizado',
+        status === 'CONFIRMED'
+          ? 'Tu asistencia quedó confirmada.'
+          : status === 'DECLINED'
+            ? 'Marcaste que no podrás asistir.'
+            : 'Tu respuesta fue actualizada.',
+      )
+    } catch (error) {
+      Alert.alert(
+        'No se pudo actualizar',
+        (error as Error).message,
+      )
+    } finally {
+      setRsvpSaving(false)
+    }
+  }
+
+  function changeCompanions(
+    delta: number,
+  ) {
+    if (!rsvp) {
+      return
+    }
+
+    const max =
+      rsvp.maxCompanions ?? 0
+
+    const next = Math.max(
+      0,
+      Math.min(
+        max,
+        rsvp.companions + delta,
+      ),
+    )
+
+    if (
+      next === rsvp.companions
+    ) {
+      return
+    }
+
+    updateRsvp(
+      rsvp.status,
+      next,
+    )
+  }
 
   function comingSoon(name: string) {
     Alert.alert(
@@ -243,6 +440,248 @@ export function EventHomeScreen({
           </View>
         </View>
 
+        {/* CONFIRMACIÓN DE ASISTENCIA */}
+        <View style={styles.rsvpCard}>
+          <View style={styles.rsvpHeader}>
+            <View style={styles.rsvpIcon}>
+              <Feather
+                name="check-circle"
+                size={24}
+                color={PURPLE}
+              />
+            </View>
+
+            <View style={styles.rsvpCopy}>
+              <Text style={styles.rsvpTitle}>
+                Confirma tu asistencia
+              </Text>
+
+              <Text style={styles.rsvpDescription}>
+                Indica si asistirás a este evento.
+              </Text>
+            </View>
+
+            {rsvpLoading ? (
+              <ActivityIndicator
+                size="small"
+                color={PURPLE}
+              />
+            ) : (
+              <View
+                style={[
+                  styles.rsvpStatusBadge,
+                  rsvp?.status === 'CONFIRMED'
+                    ? styles.rsvpStatusConfirmed
+                    : rsvp?.status === 'DECLINED'
+                      ? styles.rsvpStatusDeclined
+                      : styles.rsvpStatusPending,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.rsvpStatusText,
+                    rsvp?.status === 'CONFIRMED'
+                      ? styles.rsvpStatusTextConfirmed
+                      : rsvp?.status === 'DECLINED'
+                        ? styles.rsvpStatusTextDeclined
+                        : styles.rsvpStatusTextPending,
+                  ]}
+                >
+                  {rsvp?.status === 'CONFIRMED'
+                    ? 'Confirmado'
+                    : rsvp?.status === 'DECLINED'
+                      ? 'No asistiré'
+                      : 'Pendiente'}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {rsvp ? (
+            <>
+              <View style={styles.rsvpActions}>
+                <Pressable
+                  disabled={rsvpSaving}
+                  style={({ pressed }) => [
+                    styles.rsvpButton,
+                    styles.rsvpButtonPrimary,
+                    rsvp.status === 'CONFIRMED' &&
+                      styles.rsvpButtonPrimarySelected,
+                    rsvpSaving &&
+                      styles.rsvpButtonDisabled,
+                    pressed &&
+                      !rsvpSaving &&
+                      styles.pressed,
+                  ]}
+                  onPress={() =>
+                    updateRsvp(
+                      'CONFIRMED',
+                    )
+                  }
+                >
+                  <Feather
+                    name="check"
+                    size={18}
+                    color={WHITE}
+                  />
+
+                  <Text style={styles.rsvpButtonPrimaryText}>
+                    Sí, asistiré
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  disabled={rsvpSaving}
+                  style={({ pressed }) => [
+                    styles.rsvpButton,
+                    styles.rsvpButtonSecondary,
+                    rsvp.status === 'DECLINED' &&
+                      styles.rsvpButtonSecondarySelected,
+                    rsvpSaving &&
+                      styles.rsvpButtonDisabled,
+                    pressed &&
+                      !rsvpSaving &&
+                      styles.pressed,
+                  ]}
+                  onPress={() =>
+                    updateRsvp(
+                      'DECLINED',
+                    )
+                  }
+                >
+                  <Feather
+                    name="x"
+                    size={18}
+                    color={
+                      rsvp.status === 'DECLINED'
+                        ? DANGER
+                        : MUTED
+                    }
+                  />
+
+                  <Text
+                    style={[
+                      styles.rsvpButtonSecondaryText,
+                      rsvp.status === 'DECLINED' &&
+                        styles.rsvpButtonSecondaryTextSelected,
+                    ]}
+                  >
+                    No podré asistir
+                  </Text>
+                </Pressable>
+              </View>
+
+              {rsvp.maxCompanions !==
+                undefined &&
+              rsvp.maxCompanions > 0 ? (
+                <View style={styles.companionsRow}>
+                  <View style={styles.companionsCopy}>
+                    <Text style={styles.companionsTitle}>
+                      Acompañantes
+                    </Text>
+
+                    <Text style={styles.companionsText}>
+                      Máximo permitido: {rsvp.maxCompanions}
+                    </Text>
+                  </View>
+
+                  <View style={styles.companionsControl}>
+                    <Pressable
+                      disabled={
+                        rsvpSaving ||
+                        rsvp.companions <= 0
+                      }
+                      style={[
+                        styles.companionButton,
+                        (
+                          rsvpSaving ||
+                          rsvp.companions <= 0
+                        ) &&
+                          styles.companionButtonDisabled,
+                      ]}
+                      onPress={() =>
+                        changeCompanions(-1)
+                      }
+                    >
+                      <Feather
+                        name="minus"
+                        size={17}
+                        color={NAVY}
+                      />
+                    </Pressable>
+
+                    <Text style={styles.companionsValue}>
+                      {rsvp.companions}
+                    </Text>
+
+                    <Pressable
+                      disabled={
+                        rsvpSaving ||
+                        rsvp.companions >=
+                          rsvp.maxCompanions
+                      }
+                      style={[
+                        styles.companionButton,
+                        (
+                          rsvpSaving ||
+                          rsvp.companions >=
+                            rsvp.maxCompanions
+                        ) &&
+                          styles.companionButtonDisabled,
+                      ]}
+                      onPress={() =>
+                        changeCompanions(1)
+                      }
+                    >
+                      <Feather
+                        name="plus"
+                        size={17}
+                        color={NAVY}
+                      />
+                    </Pressable>
+                  </View>
+                </View>
+              ) : null}
+            </>
+          ) : !rsvpLoading ? (
+            <View style={styles.rsvpUnavailable}>
+              <Feather
+                name="alert-circle"
+                size={17}
+                color={DANGER}
+              />
+
+              <Text style={styles.rsvpUnavailableText}>
+                No fue posible cargar el RSVP de este evento.
+              </Text>
+            </View>
+          ) : null}
+
+          {capacity?.availableSpots !==
+            undefined ||
+          capacity?.capacity !==
+            undefined ? (
+            <View style={styles.capacityInfo}>
+              <Feather
+                name="users"
+                size={16}
+                color={MUTED}
+              />
+
+              <Text style={styles.capacityInfoText}>
+                {capacity.availableSpots !==
+                undefined
+                  ? `Cupos disponibles: ${capacity.availableSpots}`
+                  : `Capacidad del evento: ${capacity.capacity}`}
+              </Text>
+            </View>
+          ) : null}
+
+          <Text style={styles.rsvpNote}>
+            En modo demo, los cambios se conservan durante la sesión actual.
+          </Text>
+        </View>
+
         {/* IMAGEN DEL EVENTO */}
         <ImageBackground
           source={require('../../../assets/event-login-background.png')}
@@ -282,9 +721,7 @@ export function EventHomeScreen({
             styles.passCard,
             pressed && styles.pressed,
           ]}
-          onPress={() =>
-            comingSoon('Tu pase')
-          }
+          onPress={openEventPass}
         >
           <View style={styles.ticketArea}>
             <MaterialCommunityIcons
@@ -300,20 +737,42 @@ export function EventHomeScreen({
             </Text>
 
             <Text style={styles.passPerson}>
-              Ana Organizadora
+              {passes === null
+                ? 'Cargando pase...'
+                : eventPass
+                  ? eventPass.passType
+                  : 'Sin pase asignado'}
             </Text>
 
             <Text style={styles.passRole}>
-              Asistente General
+              {passes === null
+                ? 'Consultando información'
+                : eventPass
+                  ? eventPass.qrValue
+                    ? 'Pase digital disponible'
+                    : 'Pase registrado · QR pendiente'
+                  : 'No hay un pase asociado a este evento'}
             </Text>
           </View>
 
           <View style={styles.qrContainer}>
-            <MaterialCommunityIcons
-              name="qrcode"
-              size={55}
-              color={NAVY}
-            />
+            {eventPass?.qrValue ? (
+              <MaterialCommunityIcons
+                name="qrcode"
+                size={55}
+                color={NAVY}
+              />
+            ) : (
+              <Feather
+                name={
+                  passes === null
+                    ? 'clock'
+                    : 'info'
+                }
+                size={31}
+                color={MUTED}
+              />
+            )}
           </View>
 
           <Feather
@@ -406,80 +865,229 @@ export function EventHomeScreen({
           </Pressable>
         </View>
 
+        {/* AHORA / SIGUIENTE */}
+        <View style={styles.liveHeader}>
+          <View>
+            <Text style={styles.activitiesTitle}>
+              Ahora / Siguiente
+            </Text>
+
+            <Text style={styles.liveNote}>
+              Agenda operativa del evento
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.liveCard}>
+          {agendaLoading ? (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator
+                size="small"
+                color={PURPLE}
+              />
+
+              <Text style={styles.loadingText}>
+                Cargando agenda...
+              </Text>
+            </View>
+          ) : agendaError ? (
+            <View style={styles.liveEmptyState}>
+              <Feather
+                name="calendar"
+                size={22}
+                color={MUTED}
+              />
+
+              <Text style={styles.liveEmptyText}>
+                La agenda no está disponible en este momento.
+              </Text>
+            </View>
+          ) : (
+            <>
+              <View style={styles.liveRow}>
+                <View style={styles.nowBadge}>
+                  <Text style={styles.nowBadgeText}>
+                    Ahora
+                  </Text>
+                </View>
+
+                <View style={styles.liveContent}>
+                  <Text style={styles.liveTitle}>
+                    {agenda?.current?.title ??
+                      'Sin actividad en curso'}
+                  </Text>
+
+                  {agenda?.current ? (
+                    <>
+                      <View style={styles.liveMetaRow}>
+                        <Feather
+                          name="clock"
+                          size={13}
+                          color={MUTED}
+                        />
+
+                        <Text style={styles.liveMetaText}>
+                          {formatTime(
+                            agenda.current.startsAt,
+                          )}
+                        </Text>
+                      </View>
+
+                      <View style={styles.liveMetaRow}>
+                        <Feather
+                          name="map-pin"
+                          size={13}
+                          color={MUTED}
+                        />
+
+                        <Text
+                          style={styles.liveMetaText}
+                          numberOfLines={1}
+                        >
+                          {agenda.current.location ??
+                            event.location}
+                        </Text>
+                      </View>
+                    </>
+                  ) : (
+                    <Text style={styles.liveEmptyText}>
+                      No hay una actividad marcada como actual.
+                    </Text>
+                  )}
+                </View>
+              </View>
+
+              <View style={styles.liveDivider} />
+
+              <View style={styles.liveRow}>
+                <View style={styles.nextBadge}>
+                  <Text style={styles.nextBadgeText}>
+                    Siguiente
+                  </Text>
+                </View>
+
+                <View style={styles.liveContent}>
+                  <Text style={styles.liveTitle}>
+                    {agenda?.next?.title ??
+                      'Sin actividad siguiente'}
+                  </Text>
+
+                  {agenda?.next ? (
+                    <>
+                      <View style={styles.liveMetaRow}>
+                        <Feather
+                          name="clock"
+                          size={13}
+                          color={MUTED}
+                        />
+
+                        <Text style={styles.liveMetaText}>
+                          {formatTime(
+                            agenda.next.startsAt,
+                          )}
+                        </Text>
+                      </View>
+
+                      <View style={styles.liveMetaRow}>
+                        <Feather
+                          name="map-pin"
+                          size={13}
+                          color={MUTED}
+                        />
+
+                        <Text
+                          style={styles.liveMetaText}
+                          numberOfLines={1}
+                        >
+                          {agenda.next.location ??
+                            event.location}
+                        </Text>
+                      </View>
+                    </>
+                  ) : (
+                    <Text style={styles.liveEmptyText}>
+                      No hay otra actividad programada.
+                    </Text>
+                  )}
+                </View>
+              </View>
+            </>
+          )}
+        </View>
+
         {/* PRÓXIMAS ACTIVIDADES */}
         <View style={styles.activitiesHeader}>
           <Text style={styles.activitiesTitle}>
             Próximas actividades
           </Text>
-
-          <Pressable
-            style={styles.agendaLink}
-            onPress={() =>
-              comingSoon('Agenda')
-            }
-          >
-            <Text style={styles.agendaLinkText}>
-              Ver agenda
-            </Text>
-
-            <Feather
-              name="chevron-right"
-              size={18}
-              color={PURPLE}
-            />
-          </Pressable>
         </View>
 
         <View style={styles.activities}>
-          {DEMO_ACTIVITIES.map(
-            activity => (
-              <Pressable
-                key={`${activity.time}-${activity.title}`}
-                style={({ pressed }) => [
-                  styles.activityRow,
-                  pressed &&
-                    styles.activityPressed,
-                ]}
-                onPress={() =>
-                  comingSoon(
-                    activity.title,
-                  )
-                }
-              >
-                <Text style={styles.activityTime}>
-                  {activity.time}
-                </Text>
-
+          {!agendaLoading &&
+          !agendaError &&
+          agenda?.activities.length ? (
+            agenda.activities
+              .filter(
+                activity =>
+                  activity.status !==
+                  'FINISHED',
+              )
+              .map(activity => (
                 <View
-                  style={
-                    styles.activityContent
-                  }
+                  key={activity.id}
+                  style={styles.activityRow}
                 >
-                  <Text
-                    style={
-                      styles.activityTitle
-                    }
-                  >
-                    {activity.title}
+                  <Text style={styles.activityTime}>
+                    {formatTime(
+                      activity.startsAt,
+                    )}
                   </Text>
 
-                  <Text
+                  <View
                     style={
-                      styles.activityDetail
+                      styles.activityContent
                     }
                   >
-                    {activity.detail}
-                  </Text>
+                    <Text
+                      style={
+                        styles.activityTitle
+                      }
+                    >
+                      {activity.title}
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.activityDetail
+                      }
+                    >
+                      {activity.detail ||
+                        activity.location ||
+                        event.location}
+                    </Text>
+                  </View>
+
+                  <Feather
+                    name="calendar"
+                    size={20}
+                    color="#798190"
+                  />
                 </View>
+              ))
+          ) : !agendaLoading &&
+            !agendaError ? (
+            <View style={styles.agendaEmptyCard}>
+              <Feather
+                name="calendar"
+                size={22}
+                color={MUTED}
+              />
 
-                <Feather
-                  name="chevron-right"
-                  size={22}
-                  color="#798190"
-                />
-              </Pressable>
-            ),
-          )}
+              <Text style={styles.agendaEmptyText}>
+                No hay próximas actividades publicadas.
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         {/* ESTADO API */}
@@ -514,9 +1122,7 @@ export function EventHomeScreen({
             styles.passButtonWrapper,
             pressed && styles.pressed,
           ]}
-          onPress={() =>
-            comingSoon('Tu pase')
-          }
+          onPress={openEventPass}
         >
           <LinearGradient
             colors={[
@@ -606,7 +1212,7 @@ export function EventHomeScreen({
         <Pressable
           style={styles.navItem}
           onPress={() =>
-            comingSoon(
+            navigation.navigate(
               'Notificaciones',
             )
           }
@@ -721,6 +1327,233 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
+  rsvpCard: {
+    marginTop: 4,
+    marginBottom: 17,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 18,
+    backgroundColor: WHITE,
+  },
+
+  rsvpHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  rsvpIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: PURPLE_SOFT,
+  },
+
+  rsvpCopy: {
+    flex: 1,
+    minWidth: 0,
+    marginLeft: 11,
+    marginRight: 8,
+  },
+
+  rsvpTitle: {
+    color: NAVY,
+    fontSize: 14.5,
+    fontWeight: '800',
+  },
+
+  rsvpDescription: {
+    color: MUTED,
+    fontSize: 10.5,
+    marginTop: 3,
+  },
+
+  rsvpStatusBadge: {
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+
+  rsvpStatusPending: {
+    backgroundColor: PURPLE_SOFT,
+  },
+
+  rsvpStatusConfirmed: {
+    backgroundColor: '#EAF8F1',
+  },
+
+  rsvpStatusDeclined: {
+    backgroundColor: '#FFF0F1',
+  },
+
+  rsvpStatusText: {
+    fontSize: 9.5,
+    fontWeight: '700',
+  },
+
+  rsvpStatusTextPending: {
+    color: PURPLE,
+  },
+
+  rsvpStatusTextConfirmed: {
+    color: '#249B68',
+  },
+
+  rsvpStatusTextDeclined: {
+    color: DANGER,
+  },
+
+  rsvpActions: {
+    flexDirection: 'row',
+    gap: 9,
+    marginTop: 14,
+  },
+
+  rsvpButton: {
+    flex: 1,
+    minHeight: 45,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    borderRadius: 13,
+  },
+
+  rsvpButtonPrimary: {
+    backgroundColor: PURPLE,
+  },
+
+  rsvpButtonPrimarySelected: {
+    backgroundColor: PURPLE_DARK,
+  },
+
+  rsvpButtonSecondary: {
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: SOFT,
+  },
+
+  rsvpButtonSecondarySelected: {
+    borderColor: '#F0B8BE',
+    backgroundColor: '#FFF4F5',
+  },
+
+  rsvpButtonPrimaryText: {
+    color: WHITE,
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
+
+  rsvpButtonSecondaryText: {
+    color: MUTED,
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
+
+  rsvpButtonSecondaryTextSelected: {
+    color: DANGER,
+  },
+
+  rsvpButtonDisabled: {
+    opacity: 0.55,
+  },
+
+  companionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent:
+      'space-between',
+    gap: 12,
+    marginTop: 14,
+    paddingTop: 13,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+  },
+
+  companionsCopy: {
+    flex: 1,
+  },
+
+  companionsTitle: {
+    color: NAVY,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+
+  companionsText: {
+    color: MUTED,
+    fontSize: 10,
+    marginTop: 3,
+  },
+
+  companionsControl: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+
+  companionButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: BORDER,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: SOFT,
+  },
+
+  companionButtonDisabled: {
+    opacity: 0.35,
+  },
+
+  companionsValue: {
+    minWidth: 18,
+    color: NAVY,
+    fontSize: 14,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+
+  capacityInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    marginTop: 13,
+  },
+
+  capacityInfoText: {
+    flex: 1,
+    color: MUTED,
+    fontSize: 10.5,
+  },
+
+  rsvpUnavailable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 14,
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: '#FFF0F1',
+  },
+
+  rsvpUnavailableText: {
+    flex: 1,
+    color: DANGER,
+    fontSize: 10.5,
+    lineHeight: 15,
+  },
+
+  rsvpNote: {
+    color: MUTED,
+    fontSize: 9.5,
+    lineHeight: 14,
+    marginTop: 11,
+  },
+
   hero: {
     height: 190,
     padding: 22,
@@ -824,6 +1657,143 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     textAlign: 'center',
+  },
+
+  liveHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 26,
+    marginBottom: 10,
+  },
+
+  liveNote: {
+    color: MUTED,
+    fontSize: 10.5,
+    marginTop: 3,
+  },
+
+  liveDemoBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: PURPLE_SOFT,
+  },
+
+  liveDemoBadgeText: {
+    color: PURPLE,
+    fontSize: 9.5,
+    fontWeight: '800',
+  },
+
+  liveEmptyState: {
+    minHeight: 94,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 18,
+  },
+
+  liveEmptyText: {
+    color: MUTED,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+
+  agendaEmptyCard: {
+    minHeight: 82,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
+    paddingHorizontal: 18,
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 16,
+    backgroundColor: WHITE,
+  },
+
+  agendaEmptyText: {
+    color: MUTED,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+
+  liveCard: {
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 18,
+    backgroundColor: WHITE,
+  },
+
+  liveRow: {
+    minHeight: 92,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+  },
+
+  liveDivider: {
+    height: 1,
+    backgroundColor: BORDER,
+  },
+
+  nowBadge: {
+    minWidth: 68,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    alignItems: 'center',
+    backgroundColor: '#EAF8F1',
+  },
+
+  nowBadgeText: {
+    color: '#249B68',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+
+  nextBadge: {
+    minWidth: 68,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    alignItems: 'center',
+    backgroundColor: PURPLE_SOFT,
+  },
+
+  nextBadgeText: {
+    color: PURPLE,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+
+  liveContent: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  liveTitle: {
+    color: NAVY,
+    fontSize: 13,
+    fontWeight: '800',
+    marginBottom: 5,
+  },
+
+  liveMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 3,
+  },
+
+  liveMetaText: {
+    flex: 1,
+    color: MUTED,
+    fontSize: 10.5,
   },
 
   activitiesHeader: {

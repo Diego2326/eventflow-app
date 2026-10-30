@@ -22,7 +22,12 @@ import {
   useSafeAreaInsets,
 } from 'react-native-safe-area-context'
 
-import { request } from '../../services/api'
+import {
+  registerAccount,
+} from '../../services/api'
+import {
+  signInWithGoogle,
+} from '../../services/googleAuth'
 
 const NAVY = '#0B1D3A'
 const PURPLE = '#6848E7'
@@ -35,6 +40,28 @@ const INPUT_BACKGROUND = '#FBFCFE'
 const BORDER = '#DDE2EA'
 const MUTED = '#737D91'
 const ERROR = '#B74C43'
+
+function isValidEmail(
+  value: string,
+) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+    value.trim(),
+  )
+}
+
+function passwordError(
+  value: string,
+) {
+  if (value.length < 8) {
+    return 'La contraseña debe tener al menos 8 caracteres.'
+  }
+
+  if (!/\d/.test(value)) {
+    return 'La contraseña debe incluir al menos un número.'
+  }
+
+  return ''
+}
 
 export function RegisterScreen({
   navigation,
@@ -70,12 +97,18 @@ export function RegisterScreen({
   async function submit() {
     if (loading) return
 
+    const cleanName = name.trim()
+    const cleanEmail =
+      email.trim().toLowerCase()
+    const cleanPhone =
+      phone.replace(/\D/g, '')
+
     setError('')
 
     if (
-      !name.trim() ||
-      !email.trim() ||
-      !phone.trim() ||
+      !cleanName ||
+      !cleanEmail ||
+      !cleanPhone ||
       !password ||
       !confirmPassword
     ) {
@@ -85,16 +118,38 @@ export function RegisterScreen({
       return
     }
 
-    if (password !== confirmPassword) {
+    if (cleanName.length < 2) {
       setError(
-        'Las contraseñas no coinciden.',
+        'Ingresa tu nombre completo.',
       )
       return
     }
 
-    if (password.length < 6) {
+    if (!isValidEmail(cleanEmail)) {
       setError(
-        'La contraseña debe tener al menos 6 caracteres.',
+        'Ingresa un correo electrónico válido.',
+      )
+      return
+    }
+
+    if (cleanPhone.length !== 8) {
+      setError(
+        'Ingresa un número de teléfono de 8 dígitos.',
+      )
+      return
+    }
+
+    const invalidPassword =
+      passwordError(password)
+
+    if (invalidPassword) {
+      setError(invalidPassword)
+      return
+    }
+
+    if (password !== confirmPassword) {
+      setError(
+        'Las contraseñas no coinciden.',
       )
       return
     }
@@ -109,25 +164,31 @@ export function RegisterScreen({
     setLoading(true)
 
     try {
-      await request(
-        '/auth/register',
-        'POST',
-        {
-          name: name.trim(),
-          email: email.trim(),
-          phone: `+502${phone.trim()}`,
+      const result =
+        await registerAccount({
+          name: cleanName,
+          email: cleanEmail,
+          phone: `+502${cleanPhone}`,
           password,
-        },
-      )
+        })
 
       Alert.alert(
-        'Cuenta creada',
-        'Tu cuenta fue creada correctamente. Revisa el enlace de activación si es necesario.',
+        result.status === 'PENDING'
+          ? 'Revisa tu correo'
+          : 'Cuenta creada',
+        result.message ??
+          (
+            result.status === 'PENDING'
+              ? 'Tu cuenta fue creada y está pendiente de verificación. Revisa tu correo para activarla.'
+              : 'Tu cuenta fue creada correctamente. Ya puedes iniciar sesión.'
+          ),
         [
           {
-            text: 'Iniciar sesión',
+            text: 'Ir al inicio de sesión',
             onPress: () =>
-              navigation.replace('Login'),
+              navigation.replace(
+                'Login',
+              ),
           },
         ],
       )
@@ -140,18 +201,48 @@ export function RegisterScreen({
     }
   }
 
-  function googleRegister() {
-    Alert.alert(
-      'Continuar con Google',
-      'La integración con Google todavía no está conectada.',
-    )
-  }
+  async function googleRegister() {
+    if (loading) return
 
-  function addPhoto() {
-    Alert.alert(
-      'Foto de perfil',
-      'La selección de foto se conectará posteriormente.',
-    )
+    setError('')
+    setLoading(true)
+
+    try {
+      const result =
+        await signInWithGoogle()
+
+      if (
+        result.status ===
+        'CANCELLED'
+      ) {
+        return
+      }
+
+      if (
+        result.status ===
+        'PROFILE_REQUIRED'
+      ) {
+        navigation.navigate(
+          'Completar registro Google',
+          {
+            registrationToken:
+              result.registrationToken,
+            email: result.email,
+            name:
+              result.name ?? '',
+          },
+        )
+        return
+      }
+
+      navigation.replace('Inicio')
+    } catch (error) {
+      setError(
+        (error as Error).message,
+      )
+    } finally {
+      setLoading(false)
+    }
   }
 
   function openTerms() {
@@ -227,39 +318,8 @@ export function RegisterScreen({
             </Text>
           </View>
 
-          {/* FOTO */}
-          <Pressable
-            style={styles.avatarSection}
-            onPress={addPhoto}
-          >
-            <View style={styles.avatar}>
-              <Feather
-                name="user"
-                size={48}
-                color="#747D8E"
-              />
-
-              <LinearGradient
-                colors={[
-                  PURPLE,
-                  PURPLE_DARK,
-                ]}
-                style={styles.cameraButton}
-              >
-                <Feather
-                  name="camera"
-                  size={20}
-                  color={WHITE}
-                />
-              </LinearGradient>
-            </View>
-
-            <Text style={styles.addPhotoText}>
-              Agregar foto
-            </Text>
-          </Pressable>
-
           {/* FORMULARIO */}
+
           <View style={styles.form}>
             <View style={styles.inputContainer}>
               <Feather
@@ -279,7 +339,10 @@ export function RegisterScreen({
                 }}
                 editable={!loading}
                 autoCapitalize="words"
+                autoComplete="name"
+                textContentType="name"
                 returnKeyType="next"
+                accessibilityLabel="Nombre completo"
               />
             </View>
 
@@ -303,7 +366,10 @@ export function RegisterScreen({
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
+                autoComplete="email"
+                textContentType="emailAddress"
                 returnKeyType="next"
+                accessibilityLabel="Correo electrónico"
               />
             </View>
 
@@ -349,8 +415,11 @@ export function RegisterScreen({
                 }}
                 editable={!loading}
                 keyboardType="phone-pad"
+                autoComplete="tel"
+                textContentType="telephoneNumber"
                 maxLength={8}
                 returnKeyType="next"
+                accessibilityLabel="Teléfono"
               />
             </View>
 
@@ -373,7 +442,10 @@ export function RegisterScreen({
                 }}
                 editable={!loading}
                 secureTextEntry={!showPassword}
+                autoComplete="new-password"
+                textContentType="newPassword"
                 returnKeyType="next"
+                accessibilityLabel="Contraseña"
               />
 
               <Pressable
@@ -384,12 +456,18 @@ export function RegisterScreen({
                   )
                 }
                 hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  showPassword
+                    ? 'Ocultar contraseña'
+                    : 'Mostrar contraseña'
+                }
               >
                 <Feather
                   name={
                     showPassword
-                      ? 'eye'
-                      : 'eye-off'
+                      ? 'eye-off'
+                      : 'eye'
                   }
                   size={22}
                   color={MUTED}
@@ -418,8 +496,11 @@ export function RegisterScreen({
                 secureTextEntry={
                   !showConfirmPassword
                 }
+                autoComplete="new-password"
+                textContentType="newPassword"
                 returnKeyType="done"
                 onSubmitEditing={submit}
+                accessibilityLabel="Confirmar contraseña"
               />
 
               <Pressable
@@ -430,17 +511,35 @@ export function RegisterScreen({
                   )
                 }
                 hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  showConfirmPassword
+                    ? 'Ocultar confirmación de contraseña'
+                    : 'Mostrar confirmación de contraseña'
+                }
               >
                 <Feather
                   name={
                     showConfirmPassword
-                      ? 'eye'
-                      : 'eye-off'
+                      ? 'eye-off'
+                      : 'eye'
                   }
                   size={22}
                   color={MUTED}
                 />
               </Pressable>
+            </View>
+
+            <View style={styles.passwordHint}>
+              <Feather
+                name="info"
+                size={15}
+                color={MUTED}
+              />
+
+              <Text style={styles.passwordHintText}>
+                Usa al menos 8 caracteres e incluye un número.
+              </Text>
             </View>
 
             {/* TERMINOS */}
@@ -456,6 +555,13 @@ export function RegisterScreen({
                     current => !current,
                   )
                   setError('')
+                }}
+                disabled={loading}
+                accessibilityRole="checkbox"
+                accessibilityLabel="Aceptar términos y condiciones"
+                accessibilityState={{
+                  checked: acceptedTerms,
+                  disabled: loading,
                 }}
               >
                 {acceptedTerms ? (
@@ -482,7 +588,11 @@ export function RegisterScreen({
 
             {/* ERROR */}
             {error ? (
-              <View style={styles.errorBox}>
+              <View
+                style={styles.errorBox}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="polite"
+              >
                 <Feather
                   name="alert-circle"
                   size={18}
@@ -499,6 +609,12 @@ export function RegisterScreen({
             <Pressable
               onPress={submit}
               disabled={loading}
+              accessibilityRole="button"
+              accessibilityLabel="Crear cuenta"
+              accessibilityState={{
+                disabled: loading,
+                busy: loading,
+              }}
               style={({ pressed }) => [
                 styles.primaryButtonWrapper,
                 pressed &&
@@ -567,6 +683,11 @@ export function RegisterScreen({
               ]}
               onPress={googleRegister}
               disabled={loading}
+              accessibilityRole="button"
+              accessibilityLabel="Continuar con Google"
+              accessibilityState={{
+                disabled: loading,
+              }}
             >
               <FontAwesome
                 name="google"
@@ -590,6 +711,8 @@ export function RegisterScreen({
                   navigation.replace('Login')
                 }
                 disabled={loading}
+                accessibilityRole="button"
+                accessibilityLabel="Iniciar sesión"
               >
                 <Text style={styles.loginLink}>
                   Iniciar sesión
@@ -842,6 +965,22 @@ const styles = StyleSheet.create({
     color: NAVY,
 
     fontSize: 14,
+  },
+
+  passwordHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    marginTop: -1,
+    marginBottom: 4,
+    paddingHorizontal: 4,
+  },
+
+  passwordHintText: {
+    flex: 1,
+    color: MUTED,
+    fontSize: 10.5,
+    lineHeight: 15,
   },
 
   /* TERMS */

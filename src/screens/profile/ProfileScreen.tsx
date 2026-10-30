@@ -3,15 +3,12 @@ import {
   useMemo,
   useState,
 } from 'react'
-import type { ReactNode } from 'react'
-
 import {
   ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   View,
 } from 'react-native'
@@ -25,16 +22,16 @@ import {
 } from 'react-native-safe-area-context'
 
 import {
-  api,
+  getCurrentUser,
+  getEvents,
+  getNotifications,
+  getPasses,
   logout,
 } from '../../services/api'
 
-import {
-  DEMO_EMAIL,
-} from '../../services/demo'
-
 import type {
   EventItem,
+  EventPass,
 } from '../../types/events'
 
 const NAVY = '#0B1D3A'
@@ -54,14 +51,9 @@ type MenuRowProps = {
     | 'credit-card'
     | 'bell'
     | 'shield'
-    | 'moon'
-    | 'help-circle'
-    | 'file-text'
 
   title: string
-  value?: string
-  onPress?: () => void
-  rightElement?: ReactNode
+  onPress: () => void
 }
 
 function nameFromEmail(
@@ -95,18 +87,14 @@ function nameFromEmail(
 function MenuRow({
   icon,
   title,
-  value,
   onPress,
-  rightElement,
 }: MenuRowProps) {
   return (
     <Pressable
       onPress={onPress}
-      disabled={!onPress}
       style={({ pressed }) => [
         styles.menuRow,
         pressed &&
-          onPress &&
           styles.menuRowPressed,
       ]}
     >
@@ -123,19 +111,11 @@ function MenuRow({
       </View>
 
       <View style={styles.menuRight}>
-        {value ? (
-          <Text style={styles.menuValue}>
-            {value}
-          </Text>
-        ) : null}
-
-        {rightElement ?? (
-          <Feather
-            name="chevron-right"
-            size={22}
-            color="#7D8596"
-          />
-        )}
+        <Feather
+          name="chevron-right"
+          size={22}
+          color="#7D8596"
+        />
       </View>
     </Pressable>
   )
@@ -154,35 +134,86 @@ export function ProfileScreen({
       null,
     )
 
+  const [passes, setPasses] =
+    useState<EventPass[] | null>(
+      null,
+    )
+
   const [
-    notificationsEnabled,
-    setNotificationsEnabled,
-  ] = useState(true)
+    currentUser,
+    setCurrentUser,
+  ] = useState<{
+    name: string
+    email: string
+    phone: string
+  } | null>(null)
 
-  /*
-   * El correo sí existe en el proyecto.
-   * No inventamos teléfono.
-   */
+  const [
+    hasUnreadNotifications,
+    setHasUnreadNotifications,
+  ] = useState(false)
+
   const profileEmail =
-    DEMO_EMAIL || ''
+    currentUser?.email ?? ''
 
-  const profilePhone = ''
+  const profilePhone =
+    currentUser?.phone ?? ''
 
   const profileName =
-    useMemo(
-      () =>
-        nameFromEmail(
-          profileEmail,
-        ),
-      [profileEmail],
+    currentUser?.name ||
+    nameFromEmail(
+      profileEmail,
     )
 
   useEffect(() => {
-    api<EventItem[]>('/events')
-      .then(setEvents)
-      .catch(() =>
-        setEvents([]),
+    let mounted = true
+
+    Promise.all([
+      getEvents(),
+      getPasses(),
+      getNotifications(),
+      getCurrentUser(),
+    ])
+      .then(
+        ([
+          eventData,
+          passData,
+          notificationData,
+          user,
+        ]) => {
+          if (!mounted) return
+
+          setEvents(eventData)
+          setPasses(passData)
+          setHasUnreadNotifications(
+            notificationData.some(
+              item => item.unread,
+            ),
+          )
+
+          if (user) {
+            setCurrentUser({
+              name: user.name,
+              email: user.email,
+              phone: user.phone,
+            })
+          } else {
+            setCurrentUser(null)
+          }
+        },
       )
+      .catch(() => {
+        if (!mounted) return
+
+        setEvents([])
+        setPasses([])
+        setHasUnreadNotifications(false)
+        setCurrentUser(null)
+      })
+
+    return () => {
+      mounted = false
+    }
   }, [])
 
   const stats = useMemo(() => {
@@ -204,25 +235,23 @@ export function ProfileScreen({
           ).getTime() < now,
       ).length ?? 0
 
+    const activePasses =
+      passes?.filter(
+        pass =>
+          pass.status === 'ACTIVE' ||
+          pass.status === 'PENDING',
+      ).length ?? 0
+
     return {
       upcoming,
       past,
-      passes: upcoming,
+      passes: activePasses,
     }
-  }, [events])
+  }, [events, passes])
 
   function openPersonalInfo() {
     navigation.navigate(
       'Información personal',
-    )
-  }
-
-  function comingSoon(
-    name: string,
-  ) {
-    Alert.alert(
-      name,
-      'Esta sección estará disponible próximamente.',
     )
   }
 
@@ -282,7 +311,7 @@ export function ProfileScreen({
               styles.notificationButton
             }
             onPress={() =>
-              comingSoon(
+              navigation.navigate(
                 'Notificaciones',
               )
             }
@@ -293,11 +322,13 @@ export function ProfileScreen({
               color={NAVY}
             />
 
-            <View
-              style={
-                styles.notificationDot
-              }
-            />
+            {hasUnreadNotifications ? (
+              <View
+                style={
+                  styles.notificationDot
+                }
+              />
+            ) : null}
           </Pressable>
 
           <View
@@ -627,7 +658,7 @@ export function ProfileScreen({
                 styles.statCopy
               }
             >
-              {!events ? (
+              {!passes ? (
                 <ActivityIndicator
                   size="small"
                   color={PURPLE}
@@ -676,7 +707,7 @@ export function ProfileScreen({
             icon="credit-card"
             title="Mis pases"
             onPress={() =>
-              comingSoon(
+              navigation.navigate(
                 'Mis pases',
               )
             }
@@ -686,7 +717,7 @@ export function ProfileScreen({
             icon="bell"
             title="Notificaciones"
             onPress={() =>
-              comingSoon(
+              navigation.navigate(
                 'Notificaciones',
               )
             }
@@ -698,85 +729,6 @@ export function ProfileScreen({
             onPress={() =>
               navigation.navigate(
                 'Privacidad y seguridad',
-              )
-            }
-          />
-        </View>
-
-        {/* PREFERENCIAS */}
-
-        <Text
-          style={
-            styles.sectionTitle
-          }
-        >
-          Preferencias
-        </Text>
-
-        <View style={styles.menuCard}>
-          <MenuRow
-            icon="moon"
-            title="Tema"
-            value="Claro"
-            onPress={() =>
-              comingSoon('Tema')
-            }
-          />
-
-          <MenuRow
-            icon="bell"
-            title="Recibir notificaciones"
-            rightElement={
-              <Switch
-                value={
-                  notificationsEnabled
-                }
-                onValueChange={
-                  setNotificationsEnabled
-                }
-                trackColor={{
-                  false:
-                    '#D7DAE2',
-                  true:
-                    '#B9A9FF',
-                }}
-                thumbColor={
-                  notificationsEnabled
-                    ? PURPLE
-                    : WHITE
-                }
-              />
-            }
-          />
-        </View>
-
-        {/* AYUDA */}
-
-        <Text
-          style={
-            styles.sectionTitle
-          }
-        >
-          Ayuda
-        </Text>
-
-        <View style={styles.menuCard}>
-          <MenuRow
-            icon="help-circle"
-            title="Centro de ayuda"
-            onPress={() =>
-              comingSoon(
-                'Centro de ayuda',
-              )
-            }
-          />
-
-          <MenuRow
-            icon="file-text"
-            title="Términos y condiciones"
-            onPress={() =>
-              comingSoon(
-                'Términos y condiciones',
               )
             }
           />
@@ -874,7 +826,7 @@ export function ProfileScreen({
         <Pressable
           style={styles.navItem}
           onPress={() =>
-            comingSoon(
+            navigation.navigate(
               'Notificaciones',
             )
           }

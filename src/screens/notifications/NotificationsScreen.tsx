@@ -1,9 +1,11 @@
 import {
+  useEffect,
   useMemo,
   useState,
 } from 'react'
 
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,6 +21,22 @@ import {
   useSafeAreaInsets,
 } from 'react-native-safe-area-context'
 
+import {
+  getEventAgenda,
+  getEvents,
+  getNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+} from '../../services/api'
+
+import type {
+  NotificationItem,
+} from '../../services/api'
+
+import type {
+  EventAgenda,
+} from '../../types/events'
+
 const NAVY = '#0B1D3A'
 const PURPLE = '#6848E7'
 const PURPLE_SOFT = '#F0EDFF'
@@ -28,67 +46,93 @@ const BACKGROUND = '#F8F8FC'
 const BORDER = '#E2E5EC'
 const MUTED = '#737D91'
 
-type NotificationItem = {
-  id: string
-  title: string
-  message: string
-  time: string
-  icon:
-    | 'calendar'
-    | 'bell'
-    | 'check-circle'
-    | 'users'
-    | 'map-pin'
-  unread: boolean
+function kindLabel(
+  kind: NotificationItem['kind'],
+) {
+  switch (kind) {
+    case 'SEGMENTED':
+      return 'Segmentada'
+    case 'MODULE':
+      return 'Automática'
+    case 'GENERAL':
+    default:
+      return 'General'
+  }
 }
 
-const INITIAL_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: '1',
-    title: 'Tu evento está por comenzar',
-    message:
-      'Cumbre Creativa 2026 inicia próximamente. Revisa tu agenda antes de entrar.',
-    time: 'Hace 10 min',
-    icon: 'calendar',
-    unread: true,
-  },
-  {
-    id: '2',
-    title: 'Tu pase está disponible',
-    message:
-      'Ya puedes consultar tu pase digital para tu próximo evento.',
-    time: 'Hace 1 h',
-    icon: 'check-circle',
-    unread: true,
-  },
-  {
-    id: '3',
-    title: 'Nueva actividad',
-    message:
-      'Se agregó una actividad a la agenda del evento.',
-    time: 'Ayer',
-    icon: 'bell',
-    unread: false,
-  },
-  {
-    id: '4',
-    title: 'Networking disponible',
-    message:
-      'Conoce a otros asistentes y amplía tus conexiones.',
-    time: 'Ayer',
-    icon: 'users',
-    unread: false,
-  },
-  {
-    id: '5',
-    title: 'Ubicación actualizada',
-    message:
-      'Consulta nuevamente la ubicación de tu próximo evento.',
-    time: 'Hace 2 días',
-    icon: 'map-pin',
-    unread: false,
-  },
-]
+function formatNotificationTime(
+  value: string,
+) {
+  const date = new Date(value)
+
+  if (
+    Number.isNaN(
+      date.getTime(),
+    )
+  ) {
+    return ''
+  }
+
+  const diffMs =
+    Date.now() - date.getTime()
+
+  const minutes =
+    Math.floor(
+      diffMs / 60000,
+    )
+
+  if (minutes < 1) {
+    return 'Ahora'
+  }
+
+  if (minutes < 60) {
+    return `Hace ${minutes} min`
+  }
+
+  const hours =
+    Math.floor(
+      minutes / 60,
+    )
+
+  if (hours < 24) {
+    return `Hace ${hours} h`
+  }
+
+  const days =
+    Math.floor(
+      hours / 24,
+    )
+
+  if (days === 1) {
+    return 'Ayer'
+  }
+
+  if (days < 7) {
+    return `Hace ${days} días`
+  }
+
+  return date.toLocaleDateString(
+    'es-GT',
+    {
+      day: 'numeric',
+      month: 'short',
+    },
+  )
+}
+
+function formatAgendaTime(
+  value: string,
+) {
+  return new Date(
+    value,
+  ).toLocaleTimeString(
+    'es-GT',
+    {
+      hour: 'numeric',
+      minute: '2-digit',
+    },
+  )
+}
 
 export function NotificationsScreen({
   navigation,
@@ -100,43 +144,225 @@ export function NotificationsScreen({
   const [
     notifications,
     setNotifications,
-  ] = useState(
-    INITIAL_NOTIFICATIONS,
-  )
+  ] = useState<
+    NotificationItem[] | null
+  >(null)
+
+  const [agenda, setAgenda] =
+    useState<EventAgenda | null>(
+      null,
+    )
+
+  const [loading, setLoading] =
+    useState(true)
+
+  const [error, setError] =
+    useState('')
+
+  useEffect(() => {
+    let mounted = true
+
+    async function load() {
+      setLoading(true)
+      setError('')
+
+      try {
+        const [
+          notificationData,
+          eventData,
+        ] = await Promise.all([
+          getNotifications(),
+          getEvents(),
+        ])
+
+        if (!mounted) return
+
+        setNotifications(
+          notificationData,
+        )
+
+        const now = Date.now()
+
+        const nextEvent =
+          [...eventData]
+            .filter(
+              event =>
+                new Date(
+                  event.startsAt,
+                ).getTime() >= now,
+            )
+            .sort(
+              (a, b) =>
+                new Date(
+                  a.startsAt,
+                ).getTime() -
+                new Date(
+                  b.startsAt,
+                ).getTime(),
+            )[0]
+
+        if (!nextEvent) {
+          setAgenda(null)
+          return
+        }
+
+        try {
+          const agendaData =
+            await getEventAgenda(
+              nextEvent.id,
+            )
+
+          if (mounted) {
+            setAgenda(
+              agendaData,
+            )
+          }
+        } catch {
+          if (mounted) {
+            setAgenda(null)
+          }
+        }
+      } catch (error) {
+        if (!mounted) return
+
+        setNotifications([])
+        setAgenda(null)
+        setError(
+          (error as Error).message,
+        )
+      } finally {
+        if (mounted) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void load()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const unreadCount =
     useMemo(
       () =>
-        notifications.filter(
+        (
+          notifications ?? []
+        ).filter(
           item => item.unread,
         ).length,
       [notifications],
     )
 
-  function markAllAsRead() {
+  const agendaMoments =
+    useMemo(() => {
+      if (!agenda) {
+        return []
+      }
+
+      return [
+        agenda.current
+          ? {
+              label:
+                'Ahora' as const,
+              activity:
+                agenda.current,
+            }
+          : null,
+        agenda.next
+          ? {
+              label:
+                'Siguiente' as const,
+              activity:
+                agenda.next,
+            }
+          : null,
+      ].filter(
+        (
+          item,
+        ): item is {
+          label:
+            | 'Ahora'
+            | 'Siguiente'
+          activity:
+            NonNullable<
+              EventAgenda[
+                'current'
+              ]
+            >
+        } => item !== null,
+      )
+    }, [agenda])
+
+  async function markAllAsRead() {
+    const current =
+      notifications ?? []
+
+    if (
+      !current.some(
+        item => item.unread,
+      )
+    ) {
+      return
+    }
+
     setNotifications(
-      current =>
-        current.map(item => ({
-          ...item,
-          unread: false,
-        })),
+      current.map(item => ({
+        ...item,
+        unread: false,
+      })),
     )
+
+    try {
+      await markAllNotificationsRead()
+    } catch (error) {
+      setNotifications(current)
+      setError(
+        (error as Error).message,
+      )
+    }
   }
 
-  function openNotification(
+  async function openNotification(
     id: string,
   ) {
+    const current =
+      notifications ?? []
+
+    const target =
+      current.find(
+        item => item.id === id,
+      )
+
+    if (
+      !target ||
+      !target.unread
+    ) {
+      return
+    }
+
     setNotifications(
-      current =>
-        current.map(item =>
-          item.id === id
-            ? {
-                ...item,
-                unread: false,
-              }
-            : item,
-        ),
+      current.map(item =>
+        item.id === id
+          ? {
+              ...item,
+              unread: false,
+            }
+          : item,
+      ),
     )
+
+    try {
+      await markNotificationRead(
+        id,
+      )
+    } catch (error) {
+      setNotifications(current)
+      setError(
+        (error as Error).message,
+      )
+    }
   }
 
   return (
@@ -306,6 +532,148 @@ export function NotificationsScreen({
           </View>
         </View>
 
+        {error ? (
+          <Text style={styles.errorText}>
+            {error}
+          </Text>
+        ) : null}
+
+        {/* AHORA / SIGUIENTE */}
+
+        <View style={styles.liveSectionHeader}>
+          <View>
+            <Text style={styles.sectionTitle}>
+              Ahora / Siguiente
+            </Text>
+
+            <Text style={styles.liveSectionNote}>
+              Agenda operativa del próximo evento
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.liveAgendaCard}>
+          {loading ? (
+            <View style={styles.loadingBox}>
+              <ActivityIndicator
+                size="small"
+                color={PURPLE}
+              />
+
+              <Text style={styles.loadingText}>
+                Cargando agenda...
+              </Text>
+            </View>
+          ) : agendaMoments.length ? (
+            agendaMoments.map(
+              (item, index) => (
+                <View
+                  key={item.label}
+                  style={[
+                    styles.liveAgendaRow,
+                    index !==
+                      agendaMoments.length -
+                        1 &&
+                      styles.liveAgendaBorder,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.liveLabel,
+                      item.label === 'Ahora'
+                        ? styles.liveLabelNow
+                        : styles.liveLabelNext,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.liveLabelText,
+                        item.label === 'Ahora'
+                          ? styles.liveLabelTextNow
+                          : styles.liveLabelTextNext,
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+                  </View>
+
+                  <View
+                    style={
+                      styles.liveAgendaContent
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.liveAgendaTitle
+                      }
+                    >
+                      {item.activity.title}
+                    </Text>
+
+                    <View
+                      style={
+                        styles.liveAgendaMeta
+                      }
+                    >
+                      <Feather
+                        name="clock"
+                        size={13}
+                        color={MUTED}
+                      />
+
+                      <Text
+                        style={
+                          styles.liveAgendaMetaText
+                        }
+                      >
+                        {formatAgendaTime(
+                          item.activity
+                            .startsAt,
+                        )}
+                      </Text>
+                    </View>
+
+                    <View
+                      style={
+                        styles.liveAgendaMeta
+                      }
+                    >
+                      <Feather
+                        name="map-pin"
+                        size={13}
+                        color={MUTED}
+                      />
+
+                      <Text
+                        style={
+                          styles.liveAgendaMetaText
+                        }
+                        numberOfLines={1}
+                      >
+                        {item.activity
+                          .location ||
+                          'Ubicación por confirmar'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              ),
+            )
+          ) : (
+            <View style={styles.loadingBox}>
+              <Feather
+                name="calendar"
+                size={21}
+                color={MUTED}
+              />
+
+              <Text style={styles.loadingText}>
+                No hay una actividad actual o siguiente publicada.
+              </Text>
+            </View>
+          )}
+        </View>
+
         {/* LISTADO */}
 
         <View
@@ -326,7 +694,7 @@ export function NotificationsScreen({
               styles.sectionCount
             }
           >
-            {notifications.length}
+            {notifications?.length ?? 0}
           </Text>
         </View>
 
@@ -335,117 +703,192 @@ export function NotificationsScreen({
             styles.notificationsCard
           }
         >
-          {notifications.map(
-            (
-              notification,
-              index,
-            ) => (
-              <Pressable
-                key={
-                  notification.id
-                }
-                onPress={() =>
-                  openNotification(
-                    notification.id,
-                  )
-                }
-                style={({
-                  pressed,
-                }) => [
-                  styles.notificationRow,
+          {loading ? (
+            <View style={styles.loadingBox}>
+              <ActivityIndicator
+                size="small"
+                color={PURPLE}
+              />
 
-                  index !==
-                    notifications.length -
-                      1 &&
-                    styles.notificationBorder,
-
-                  notification.unread &&
-                    styles.notificationUnread,
-
-                  pressed &&
-                    styles.rowPressed,
-                ]}
-              >
-                <View
-                  style={[
-                    styles.iconBox,
-                    notification.unread &&
-                      styles.iconBoxUnread,
-                  ]}
-                >
-                  <Feather
-                    name={
-                      notification.icon
+              <Text style={styles.loadingText}>
+                Cargando notificaciones...
+              </Text>
+            </View>
+          ) : (
+            <>
+              {(notifications ?? []).map(
+                (
+                  notification,
+                  index,
+                ) => (
+                  <Pressable
+                    key={
+                      notification.id
                     }
-                    size={22}
-                    color={PURPLE}
-                  />
-                </View>
-
-                <View
-                  style={
-                    styles.notificationContent
-                  }
-                >
-                  <View
-                    style={
-                      styles.notificationTitleRow
+                    onPress={() =>
+                      openNotification(
+                        notification.id,
+                      )
                     }
+                    style={({
+                      pressed,
+                    }) => [
+                      styles.notificationRow,
+
+                      index !==
+                        (notifications
+                          ?.length ??
+                          0) -
+                          1 &&
+                        styles.notificationBorder,
+
+                      notification.unread &&
+                        styles.notificationUnread,
+
+                      pressed &&
+                        styles.rowPressed,
+                    ]}
                   >
-                    <Text
+                    <View
                       style={[
-                        styles.notificationTitle,
-
+                        styles.iconBox,
                         notification.unread &&
-                          styles.notificationTitleUnread,
+                          styles.iconBoxUnread,
                       ]}
-                      numberOfLines={
-                        2
+                    >
+                      <Feather
+                        name={
+                          notification.icon
+                        }
+                        size={22}
+                        color={PURPLE}
+                      />
+                    </View>
+
+                    <View
+                      style={
+                        styles.notificationContent
                       }
                     >
-                      {
-                        notification.title
-                      }
-                    </Text>
-
-                    {notification.unread ? (
                       <View
                         style={
-                          styles.unreadDot
+                          styles.notificationTitleRow
                         }
-                      />
-                    ) : null}
-                  </View>
+                      >
+                        <Text
+                          style={[
+                            styles.notificationTitle,
+
+                            notification.unread &&
+                              styles.notificationTitleUnread,
+                          ]}
+                          numberOfLines={
+                            2
+                          }
+                        >
+                          {
+                            notification.title
+                          }
+                        </Text>
+
+                        {notification.unread ? (
+                          <View
+                            style={
+                              styles.unreadDot
+                            }
+                          />
+                        ) : null}
+                      </View>
+
+                      <Text
+                        style={
+                          styles.notificationMessage
+                        }
+                        numberOfLines={3}
+                      >
+                        {
+                          notification.message
+                        }
+                      </Text>
+
+                      <View
+                        style={
+                          styles.notificationMetaRow
+                        }
+                      >
+                        <View
+                          style={
+                            styles.kindBadge
+                          }
+                        >
+                          <Text
+                            style={
+                              styles.kindBadgeText
+                            }
+                          >
+                            {kindLabel(
+                              notification.kind,
+                            )}
+                          </Text>
+                        </View>
+
+                        <Text
+                          style={
+                            styles.audienceText
+                          }
+                          numberOfLines={
+                            1
+                          }
+                        >
+                          {
+                            notification.audience
+                          }
+                        </Text>
+                      </View>
+
+                      <Text
+                        style={
+                          styles.notificationTime
+                        }
+                      >
+                        {formatNotificationTime(
+                          notification.createdAt,
+                        )}
+                      </Text>
+                    </View>
+
+                    <Feather
+                      name="chevron-right"
+                      size={21}
+                      color="#8A91A0"
+                    />
+                  </Pressable>
+                ),
+              )}
+
+              {(notifications?.length ??
+                0) === 0 ? (
+                <View
+                  style={
+                    styles.loadingBox
+                  }
+                >
+                  <Feather
+                    name="bell"
+                    size={21}
+                    color={MUTED}
+                  />
 
                   <Text
                     style={
-                      styles.notificationMessage
-                    }
-                    numberOfLines={3}
-                  >
-                    {
-                      notification.message
-                    }
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.notificationTime
+                      styles.loadingText
                     }
                   >
-                    {
-                      notification.time
-                    }
+                    No tienes notificaciones recientes.
                   </Text>
                 </View>
-
-                <Feather
-                  name="chevron-right"
-                  size={21}
-                  color="#8A91A0"
-                />
-              </Pressable>
-            ),
+              ) : null}
+            </>
           )}
         </View>
       </ScrollView>
@@ -754,6 +1197,126 @@ const styles =
       marginTop: 4,
     },
 
+    errorText: {
+      color: '#B74C43',
+      fontSize: 11,
+      lineHeight: 16,
+      marginTop: 12,
+    },
+
+    loadingBox: {
+      minHeight: 86,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 9,
+      paddingHorizontal: 18,
+    },
+
+    loadingText: {
+      flex: 1,
+      color: MUTED,
+      fontSize: 11,
+      lineHeight: 17,
+      textAlign: 'center',
+    },
+
+    liveSectionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent:
+        'space-between',
+      marginTop: 26,
+      marginBottom: 11,
+    },
+
+    liveSectionNote: {
+      color: MUTED,
+      fontSize: 10.5,
+      marginTop: 3,
+    },
+
+    liveAgendaCard: {
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: BORDER,
+      borderRadius: 18,
+      backgroundColor: WHITE,
+    },
+
+    liveAgendaRow: {
+      minHeight: 94,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 13,
+    },
+
+    liveAgendaBorder: {
+      borderBottomWidth: 1,
+      borderBottomColor:
+        BORDER,
+    },
+
+    liveLabel: {
+      minWidth: 70,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+      borderRadius: 999,
+      alignItems: 'center',
+      justifyContent:
+        'center',
+    },
+
+    liveLabelNow: {
+      backgroundColor:
+        '#EAF8F1',
+    },
+
+    liveLabelNext: {
+      backgroundColor:
+        PURPLE_SOFT,
+    },
+
+    liveLabelText: {
+      fontSize: 10,
+      fontWeight: '800',
+    },
+
+    liveLabelTextNow: {
+      color: '#249B68',
+    },
+
+    liveLabelTextNext: {
+      color: PURPLE,
+    },
+
+    liveAgendaContent: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    liveAgendaTitle: {
+      color: NAVY,
+      fontSize: 13,
+      fontWeight: '800',
+      marginBottom: 6,
+    },
+
+    liveAgendaMeta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginTop: 3,
+    },
+
+    liveAgendaMetaText: {
+      flex: 1,
+      color: MUTED,
+      fontSize: 10.5,
+    },
+
     sectionHeader: {
       flexDirection: 'row',
 
@@ -886,6 +1449,33 @@ const styles =
       lineHeight: 16,
 
       marginTop: 4,
+    },
+
+    notificationMetaRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 7,
+      marginTop: 7,
+    },
+
+    kindBadge: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 999,
+      backgroundColor:
+        PURPLE_SOFT,
+    },
+
+    kindBadgeText: {
+      color: PURPLE,
+      fontSize: 9,
+      fontWeight: '700',
+    },
+
+    audienceText: {
+      flex: 1,
+      color: MUTED,
+      fontSize: 9.5,
     },
 
     notificationTime: {

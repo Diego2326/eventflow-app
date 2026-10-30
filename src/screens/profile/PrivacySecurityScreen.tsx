@@ -1,15 +1,18 @@
 import {
+  useEffect,
   useMemo,
   useState,
 } from 'react'
 
 import {
+  ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   View,
 } from 'react-native'
 
@@ -17,7 +20,6 @@ import { StatusBar } from 'expo-status-bar'
 
 import {
   Feather,
-  FontAwesome,
 } from '@expo/vector-icons'
 
 import { LinearGradient } from 'expo-linear-gradient'
@@ -27,7 +29,17 @@ import {
   useSafeAreaInsets,
 } from 'react-native-safe-area-context'
 
-import { DEMO_EMAIL } from '../../services/demo'
+import {
+  changePassword as changeAccountPassword,
+  getCurrentUser,
+  getProfilePreferences,
+  logoutAllSessions,
+  updateProfilePreferences,
+} from '../../services/api'
+
+import type {
+  ProfileVisibility,
+} from '../../services/api'
 
 const NAVY = '#0B1D3A'
 
@@ -64,8 +76,6 @@ type PrivacyRowProps = {
     | 'eye'
     | 'bar-chart-2'
     | 'mail'
-    | 'camera'
-    | 'bell'
   title: string
   value?: string
   onPress?: () => void
@@ -299,23 +309,87 @@ export function PrivacySecurityScreen({
   ] = useState(true)
 
   const [
+    profileVisibility,
+    setProfileVisibility,
+  ] = useState<ProfileVisibility>(
+    'EVENT_PARTICIPANTS',
+  )
+
+  const [
+    preferencesLoading,
+    setPreferencesLoading,
+  ] = useState(true)
+
+  const [
+    preferencesSaving,
+    setPreferencesSaving,
+  ] = useState(false)
+
+  const [
     hasChanges,
     setHasChanges,
   ] = useState(false)
 
-  /*
-   * Todavía no tenemos un endpoint
-   * que confirme estos estados.
-   *
-   * Por eso NO mostramos como real:
-   *
-   * "Cuenta verificada"
-   * "Google conectado"
-   *
-   * hasta que el backend lo confirme.
-   */
-  const accountVerified = false
-  const googleConnected = false
+  const [
+    accountEmail,
+    setAccountEmail,
+  ] = useState('')
+
+  const [
+    accountVerified,
+    setAccountVerified,
+  ] = useState(false)
+
+  const [
+    passwordFormOpen,
+    setPasswordFormOpen,
+  ] = useState(false)
+
+  const [
+    currentPassword,
+    setCurrentPassword,
+  ] = useState('')
+
+  const [
+    newPassword,
+    setNewPassword,
+  ] = useState('')
+
+  const [
+    confirmPassword,
+    setConfirmPassword,
+  ] = useState('')
+
+  const [
+    showCurrentPassword,
+    setShowCurrentPassword,
+  ] = useState(false)
+
+  const [
+    showNewPassword,
+    setShowNewPassword,
+  ] = useState(false)
+
+  const [
+    showConfirmPassword,
+    setShowConfirmPassword,
+  ] = useState(false)
+
+  const [
+    passwordLoading,
+    setPasswordLoading,
+  ] = useState(false)
+
+  const [
+    passwordError,
+    setPasswordError,
+  ] = useState('')
+
+  const [
+    passwordMessage,
+    setPasswordMessage,
+  ] = useState('')
+
 
   const sessionTime =
     useMemo(() => {
@@ -327,6 +401,64 @@ export function PrivacySecurityScreen({
         },
       )
     }, [])
+
+  useEffect(() => {
+    let mounted = true
+
+    Promise.all([
+      getCurrentUser(),
+      getProfilePreferences(),
+    ])
+      .then(
+        ([
+          currentUser,
+          preferences,
+        ]) => {
+          if (!mounted) return
+
+          if (currentUser) {
+            setAccountEmail(
+              currentUser.email,
+            )
+            setAccountVerified(
+              currentUser.status ===
+                'ACTIVE',
+            )
+          }
+
+          setPersonalizationEnabled(
+            preferences
+              .personalizationEnabled,
+          )
+          setEventCommunicationsEnabled(
+            preferences
+              .eventCommunicationsEnabled,
+          )
+          setProfileVisibility(
+            preferences
+              .profileVisibility,
+          )
+          setHasChanges(false)
+        },
+      )
+      .catch(() => {
+        if (!mounted) return
+
+        setAccountEmail('')
+        setAccountVerified(false)
+      })
+      .finally(() => {
+        if (mounted) {
+          setPreferencesLoading(
+            false,
+          )
+        }
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   function updatePersonalization(
     value: boolean,
@@ -348,138 +480,195 @@ export function PrivacySecurityScreen({
     setHasChanges(true)
   }
 
-  function comingSoon(
-    title: string,
-    message: string,
-  ) {
-    Alert.alert(
-      title,
-      message,
+  function toggleProfileVisibility() {
+    setProfileVisibility(
+      current =>
+        current ===
+        'EVENT_PARTICIPANTS'
+          ? 'PRIVATE'
+          : 'EVENT_PARTICIPANTS',
     )
+
+    setHasChanges(true)
   }
 
   function openVerification() {
     Alert.alert(
       'Verificación de cuenta',
-      `El siguiente paso será crear el flujo de verificación para ${DEMO_EMAIL}. Aquí enviaremos un código al correo y, si agregas teléfono, otro código por SMS.`,
+      accountVerified
+        ? `La cuenta ${accountEmail || 'actual'} está activa.`
+        : `La cuenta ${accountEmail || 'actual'} está pendiente de verificación. La activación se realiza mediante el enlace enviado al correo.`,
     )
   }
 
   function changePassword() {
-    comingSoon(
-      'Cambiar contraseña',
-      'Conectaremos esta opción con el flujo seguro para cambiar tu contraseña.',
+    setPasswordFormOpen(
+      current => !current,
     )
+    setPasswordError('')
+    setPasswordMessage('')
   }
 
-  function linkedDevices() {
-    comingSoon(
-      'Dispositivos vinculados',
-      'Aquí podrás consultar los teléfonos y dispositivos que tienen acceso a tu cuenta.',
-    )
+  function clearPasswordForm() {
+    setCurrentPassword('')
+    setNewPassword('')
+    setConfirmPassword('')
+    setPasswordError('')
+    setPasswordMessage('')
+    setShowCurrentPassword(false)
+    setShowNewPassword(false)
+    setShowConfirmPassword(false)
   }
+
+  async function submitPasswordChange() {
+    if (passwordLoading) return
+
+    setPasswordError('')
+    setPasswordMessage('')
+
+    if (
+      !currentPassword ||
+      !newPassword ||
+      !confirmPassword
+    ) {
+      setPasswordError(
+        'Completa los tres campos de contraseña.',
+      )
+      return
+    }
+
+    if (newPassword.length < 8) {
+      setPasswordError(
+        'La nueva contraseña debe tener al menos 8 caracteres.',
+      )
+      return
+    }
+
+    if (!/\d/.test(newPassword)) {
+      setPasswordError(
+        'La nueva contraseña debe incluir al menos un número.',
+      )
+      return
+    }
+
+    if (
+      newPassword !==
+      confirmPassword
+    ) {
+      setPasswordError(
+        'La nueva contraseña y su confirmación deben coincidir.',
+      )
+      return
+    }
+
+    if (
+      newPassword ===
+      currentPassword
+    ) {
+      setPasswordError(
+        'La nueva contraseña debe ser diferente de la contraseña actual.',
+      )
+      return
+    }
+
+    setPasswordLoading(true)
+
+    try {
+      await changeAccountPassword({
+        currentPassword,
+        newPassword,
+      })
+
+      setPasswordMessage(
+        'Tu contraseña fue actualizada correctamente.',
+      )
+
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+    } catch (error) {
+      setPasswordError(
+        (error as Error).message,
+      )
+    } finally {
+      setPasswordLoading(false)
+    }
+  }
+
 
   function activeSessions() {
-    comingSoon(
-      'Sesiones activas',
-      'Aquí podrás revisar tus sesiones iniciadas y cerrar aquellas que no reconozcas.',
-    )
-  }
-
-  function googleLogin() {
-    comingSoon(
-      'Inicio de sesión con Google',
-      googleConnected
-        ? 'Aquí podrás administrar la cuenta de Google vinculada.'
-        : 'Aquí podrás vincular una cuenta de Google con EventFlow.',
-    )
-  }
-
-  function profileVisibility() {
-    comingSoon(
-      'Visibilidad del perfil',
-      'Aquí podrás elegir quién puede ver tu perfil dentro de los eventos.',
-    )
-  }
-
-  function cameraPermissions() {
-    comingSoon(
-      'Permisos de cámara',
-      'Aquí conectaremos los permisos reales de cámara del dispositivo.',
-    )
-  }
-
-  function notificationPermissions() {
-    comingSoon(
-      'Permisos de notificaciones',
-      'Aquí conectaremos los permisos reales de notificaciones del dispositivo.',
-    )
-  }
-
-  function downloadData() {
-    comingSoon(
-      'Descargar mis datos',
-      'Cuando el backend lo soporte, podrás solicitar una copia de la información asociada a tu cuenta.',
-    )
-  }
-
-  function deleteAccount() {
     Alert.alert(
-      'Solicitar eliminación de cuenta',
-      'Esta acción deberá confirmar tu identidad antes de enviar una solicitud de eliminación.',
+      'Cerrar todas las sesiones',
+      'Esto cerrará tu sesión en todos los dispositivos asociados a tu cuenta.',
       [
         {
           text: 'Cancelar',
           style: 'cancel',
         },
         {
-          text: 'Continuar',
+          text: 'Cerrar todas',
           style: 'destructive',
-          onPress: () => {
-            Alert.alert(
-              'Pendiente de backend',
-              'Todavía no existe un endpoint confirmado para eliminar la cuenta.',
-            )
+          onPress: async () => {
+            try {
+              await logoutAllSessions()
+
+              navigation.replace(
+                'Login',
+              )
+            } catch (error) {
+              Alert.alert(
+                'No fue posible cerrar las sesiones',
+                (error as Error).message,
+              )
+            }
           },
         },
       ],
     )
   }
 
-  function privacyPolicy() {
-    comingSoon(
-      'Política de privacidad',
-      'Aquí mostraremos la política de privacidad oficial de EventFlow.',
-    )
-  }
-
-  function terms() {
-    comingSoon(
-      'Términos y condiciones',
-      'Aquí mostraremos los términos y condiciones oficiales de EventFlow.',
-    )
-  }
-
-  function saveChanges() {
-    if (!hasChanges) {
-      Alert.alert(
-        'Sin cambios',
-        'No has modificado ninguna preferencia.',
-      )
-
+  async function saveChanges() {
+    if (
+      !hasChanges ||
+      preferencesSaving
+    ) {
       return
     }
 
-    /*
-     * No fingimos persistencia:
-     * todavía necesitamos endpoint.
-     */
-    Alert.alert(
-      'Cambios preparados',
-      'Las preferencias están actualizadas en esta pantalla. Cuando conectemos el perfil con el backend podrán guardarse permanentemente.',
-    )
+    setPreferencesSaving(true)
 
-    setHasChanges(false)
+    try {
+      const updated =
+        await updateProfilePreferences({
+          personalizationEnabled,
+          eventCommunicationsEnabled,
+          profileVisibility,
+        })
+
+      setPersonalizationEnabled(
+        updated.personalizationEnabled,
+      )
+      setEventCommunicationsEnabled(
+        updated
+          .eventCommunicationsEnabled,
+      )
+      setProfileVisibility(
+        updated.profileVisibility,
+      )
+      setHasChanges(false)
+
+      Alert.alert(
+        'Preferencias guardadas',
+        'Tus preferencias de privacidad fueron actualizadas correctamente.',
+      )
+    } catch (error) {
+      Alert.alert(
+        'No fue posible guardar',
+        (error as Error).message,
+      )
+    } finally {
+      setPreferencesSaving(false)
+    }
   }
 
   return (
@@ -710,6 +899,346 @@ export function PrivacySecurityScreen({
             }
           />
 
+          {passwordFormOpen ? (
+            <View
+              style={
+                styles.passwordPanel
+              }
+            >
+              <Text
+                style={
+                  styles.passwordPanelTitle
+                }
+              >
+                Actualizar contraseña
+              </Text>
+
+              <Text
+                style={
+                  styles.passwordPanelHelp
+                }
+              >
+                Debe tener al menos 8 caracteres, incluir un número y ser diferente de la actual.
+              </Text>
+
+              <View
+                style={
+                  styles.passwordInputRow
+                }
+              >
+                <Feather
+                  name="lock"
+                  size={18}
+                  color={MUTED}
+                />
+
+                <TextInput
+                  style={
+                    styles.passwordInput
+                  }
+                  value={
+                    currentPassword
+                  }
+                  onChangeText={value => {
+                    setCurrentPassword(
+                      value,
+                    )
+                    setPasswordError('')
+                    setPasswordMessage('')
+                  }}
+                  placeholder="Contraseña actual"
+                  placeholderTextColor={
+                    MUTED
+                  }
+                  secureTextEntry={
+                    !showCurrentPassword
+                  }
+                  editable={
+                    !passwordLoading
+                  }
+                  autoComplete="current-password"
+                  textContentType="password"
+                  accessibilityLabel="Contraseña actual"
+                />
+
+                <Pressable
+                  onPress={() =>
+                    setShowCurrentPassword(
+                      current => !current,
+                    )
+                  }
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    showCurrentPassword
+                      ? 'Ocultar contraseña actual'
+                      : 'Mostrar contraseña actual'
+                  }
+                >
+                  <Feather
+                    name={
+                      showCurrentPassword
+                        ? 'eye-off'
+                        : 'eye'
+                    }
+                    size={19}
+                    color={MUTED}
+                  />
+                </Pressable>
+              </View>
+
+              <View
+                style={
+                  styles.passwordInputRow
+                }
+              >
+                <Feather
+                  name="key"
+                  size={18}
+                  color={MUTED}
+                />
+
+                <TextInput
+                  style={
+                    styles.passwordInput
+                  }
+                  value={newPassword}
+                  onChangeText={value => {
+                    setNewPassword(
+                      value,
+                    )
+                    setPasswordError('')
+                    setPasswordMessage('')
+                  }}
+                  placeholder="Nueva contraseña"
+                  placeholderTextColor={
+                    MUTED
+                  }
+                  secureTextEntry={
+                    !showNewPassword
+                  }
+                  editable={
+                    !passwordLoading
+                  }
+                  autoComplete="new-password"
+                  textContentType="newPassword"
+                  accessibilityLabel="Nueva contraseña"
+                />
+
+                <Pressable
+                  onPress={() =>
+                    setShowNewPassword(
+                      current => !current,
+                    )
+                  }
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    showNewPassword
+                      ? 'Ocultar nueva contraseña'
+                      : 'Mostrar nueva contraseña'
+                  }
+                >
+                  <Feather
+                    name={
+                      showNewPassword
+                        ? 'eye-off'
+                        : 'eye'
+                    }
+                    size={19}
+                    color={MUTED}
+                  />
+                </Pressable>
+              </View>
+
+              <View
+                style={
+                  styles.passwordInputRow
+                }
+              >
+                <Feather
+                  name="check-circle"
+                  size={18}
+                  color={MUTED}
+                />
+
+                <TextInput
+                  style={
+                    styles.passwordInput
+                  }
+                  value={
+                    confirmPassword
+                  }
+                  onChangeText={value => {
+                    setConfirmPassword(
+                      value,
+                    )
+                    setPasswordError('')
+                    setPasswordMessage('')
+                  }}
+                  placeholder="Confirmar nueva contraseña"
+                  placeholderTextColor={
+                    MUTED
+                  }
+                  secureTextEntry={
+                    !showConfirmPassword
+                  }
+                  editable={
+                    !passwordLoading
+                  }
+                  autoComplete="new-password"
+                  textContentType="newPassword"
+                  accessibilityLabel="Confirmar nueva contraseña"
+                />
+
+                <Pressable
+                  onPress={() =>
+                    setShowConfirmPassword(
+                      current => !current,
+                    )
+                  }
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    showConfirmPassword
+                      ? 'Ocultar confirmación de contraseña'
+                      : 'Mostrar confirmación de contraseña'
+                  }
+                >
+                  <Feather
+                    name={
+                      showConfirmPassword
+                        ? 'eye-off'
+                        : 'eye'
+                    }
+                    size={19}
+                    color={MUTED}
+                  />
+                </Pressable>
+              </View>
+
+              {passwordError ? (
+                <View
+                  style={
+                    styles.passwordErrorBox
+                  }
+                  accessibilityRole="alert"
+                  accessibilityLiveRegion="polite"
+                >
+                  <Feather
+                    name="alert-circle"
+                    size={16}
+                    color={DANGER}
+                  />
+
+                  <Text
+                    style={
+                      styles.passwordErrorText
+                    }
+                  >
+                    {passwordError}
+                  </Text>
+                </View>
+              ) : null}
+
+              {passwordMessage ? (
+                <View
+                  style={
+                    styles.passwordSuccessBox
+                  }
+                  accessibilityRole="alert"
+                  accessibilityLiveRegion="polite"
+                >
+                  <Feather
+                    name="check-circle"
+                    size={16}
+                    color={GREEN}
+                  />
+
+                  <Text
+                    style={
+                      styles.passwordSuccessText
+                    }
+                  >
+                    {passwordMessage}
+                  </Text>
+                </View>
+              ) : null}
+
+              <View
+                style={
+                  styles.passwordActions
+                }
+              >
+                <Pressable
+                  disabled={
+                    passwordLoading
+                  }
+                  onPress={
+                    clearPasswordForm
+                  }
+                  style={
+                    styles.passwordCancelButton
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel="Limpiar formulario de contraseña"
+                >
+                  <Text
+                    style={
+                      styles.passwordCancelText
+                    }
+                  >
+                    Limpiar
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  disabled={
+                    passwordLoading
+                  }
+                  onPress={
+                    submitPasswordChange
+                  }
+                  style={[
+                    styles.passwordSaveButton,
+                    passwordLoading &&
+                      styles.passwordButtonDisabled,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Guardar nueva contraseña"
+                  accessibilityState={{
+                    disabled:
+                      passwordLoading,
+                    busy:
+                      passwordLoading,
+                  }}
+                >
+                  {passwordLoading ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={WHITE}
+                    />
+                  ) : (
+                    <Feather
+                      name="save"
+                      size={16}
+                      color={WHITE}
+                    />
+                  )}
+
+                  <Text
+                    style={
+                      styles.passwordSaveText
+                    }
+                  >
+                    Guardar
+                  </Text>
+                </Pressable>
+              </View>
+
+            </View>
+          ) : null}
+
           <SecurityRow
             icon="shield"
             title="Verificación de cuenta"
@@ -729,79 +1258,13 @@ export function PrivacySecurityScreen({
           />
 
           <SecurityRow
-            icon="monitor"
-            title="Dispositivos vinculados"
-            onPress={
-              linkedDevices
-            }
-          />
-
-          <SecurityRow
             icon="clock"
-            title="Sesiones activas"
+            title="Cerrar todas las sesiones"
             onPress={
               activeSessions
             }
           />
 
-          <Pressable
-            style={({ pressed }) => [
-              styles.row,
-              pressed &&
-                styles.rowPressed,
-            ]}
-            onPress={
-              googleLogin
-            }
-          >
-            <View
-              style={
-                styles.rowIconArea
-              }
-            >
-              <FontAwesome
-                name="google"
-                size={24}
-                color="#4285F4"
-              />
-            </View>
-
-            <Text
-              style={
-                styles.rowTitle
-              }
-            >
-              Inicio de sesión con Google
-            </Text>
-
-            <View
-              style={[
-                styles.valueBadge,
-                googleConnected
-                  ? styles.successBadge
-                  : styles.mutedBadge,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.valueBadgeText,
-                  googleConnected
-                    ? styles.successText
-                    : styles.mutedValueText,
-                ]}
-              >
-                {googleConnected
-                  ? 'Conectado'
-                  : 'No conectado'}
-              </Text>
-            </View>
-
-            <Feather
-              name="chevron-right"
-              size={22}
-              color="#7C8494"
-            />
-          </Pressable>
         </View>
 
         {/* PRIVACIDAD */}
@@ -814,6 +1277,27 @@ export function PrivacySecurityScreen({
           Privacidad
         </Text>
 
+        {preferencesLoading ? (
+          <View
+            style={
+              styles.preferencesLoadingBox
+            }
+          >
+            <ActivityIndicator
+              size="small"
+              color={PURPLE}
+            />
+
+            <Text
+              style={
+                styles.preferencesLoadingText
+              }
+            >
+              Cargando preferencias...
+            </Text>
+          </View>
+        ) : null}
+
         <View
           style={
             styles.sectionCard
@@ -822,9 +1306,14 @@ export function PrivacySecurityScreen({
           <PrivacyRow
             icon="eye"
             title="Visibilidad del perfil"
-            value="Solo asistentes"
+            value={
+              profileVisibility ===
+              'EVENT_PARTICIPANTS'
+                ? 'Solo asistentes'
+                : 'Privado'
+            }
             onPress={
-              profileVisibility
+              toggleProfileVisibility
             }
           />
 
@@ -850,81 +1339,38 @@ export function PrivacySecurityScreen({
             }
           />
 
-          <PrivacyRow
-            icon="camera"
-            title="Administrar permisos de cámara"
-            onPress={
-              cameraPermissions
-            }
-          />
-
-          <PrivacyRow
-            icon="bell"
-            title="Administrar permisos de notificaciones"
-            onPress={
-              notificationPermissions
-            }
-          />
-        </View>
-
-        {/* DATOS */}
-
-        <Text
-          style={
-            styles.sectionTitle
-          }
-        >
-          Datos y acceso
-        </Text>
-
-        <View
-          style={
-            styles.sectionCard
-          }
-        >
-          <AccessRow
-            icon="download"
-            title="Descargar mis datos"
-            onPress={
-              downloadData
-            }
-          />
-
-          <AccessRow
-            icon="trash-2"
-            title="Solicitar eliminación de cuenta"
-            danger
-            onPress={
-              deleteAccount
-            }
-          />
-
-          <AccessRow
-            icon="file-text"
-            title="Política de privacidad"
-            onPress={
-              privacyPolicy
-            }
-          />
-
-          <AccessRow
-            icon="clipboard"
-            title="Términos y condiciones"
-            onPress={terms}
-          />
         </View>
 
         {/* GUARDAR */}
 
         <Pressable
           onPress={saveChanges}
+          disabled={
+            preferencesLoading ||
+            preferencesSaving ||
+            !hasChanges
+          }
           style={({ pressed }) => [
             styles.saveWrapper,
             pressed &&
+              !preferencesSaving &&
               styles.pressed,
-            !hasChanges &&
+            (
+              preferencesLoading ||
+              preferencesSaving ||
+              !hasChanges
+            ) &&
               styles.saveInactive,
           ]}
+          accessibilityRole="button"
+          accessibilityLabel="Guardar preferencias"
+          accessibilityState={{
+            disabled:
+              preferencesLoading ||
+              preferencesSaving ||
+              !hasChanges,
+            busy: preferencesSaving,
+          }}
         >
           <LinearGradient
             colors={[
@@ -943,13 +1389,20 @@ export function PrivacySecurityScreen({
               styles.saveButton
             }
           >
-            <Text
-              style={
-                styles.saveButtonText
-              }
-            >
-              Guardar cambios
-            </Text>
+            {preferencesSaving ? (
+              <ActivityIndicator
+                size="small"
+                color={WHITE}
+              />
+            ) : (
+              <Text
+                style={
+                  styles.saveButtonText
+                }
+              >
+                Guardar cambios
+              </Text>
+            )}
           </LinearGradient>
         </Pressable>
 
@@ -1030,9 +1483,8 @@ export function PrivacySecurityScreen({
         <Pressable
           style={styles.navItem}
           onPress={() =>
-            Alert.alert(
+            navigation.navigate(
               'Notificaciones',
-              'Esta sección estará disponible próximamente.',
             )
           }
         >
@@ -1273,6 +1725,143 @@ const styles =
       fontWeight: '700',
     },
 
+    passwordPanel: {
+      marginHorizontal: 14,
+      marginBottom: 12,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: BORDER,
+      borderRadius: 16,
+      backgroundColor:
+        '#FBFAFF',
+    },
+
+    passwordPanelTitle: {
+      color: NAVY,
+      fontSize: 13.5,
+      fontWeight: '800',
+    },
+
+    passwordPanelHelp: {
+      color: MUTED,
+      fontSize: 10.5,
+      lineHeight: 16,
+      marginTop: 4,
+      marginBottom: 11,
+    },
+
+    passwordInputRow: {
+      minHeight: 48,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 9,
+      paddingHorizontal: 12,
+      marginBottom: 9,
+      borderWidth: 1,
+      borderColor: BORDER,
+      borderRadius: 12,
+      backgroundColor: WHITE,
+    },
+
+    passwordInput: {
+      flex: 1,
+      minHeight: 46,
+      paddingVertical: 0,
+      color: NAVY,
+      fontSize: 12,
+    },
+
+    passwordErrorBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 7,
+      padding: 10,
+      marginTop: 2,
+      borderRadius: 11,
+      backgroundColor:
+        '#FFF0F1',
+    },
+
+    passwordErrorText: {
+      flex: 1,
+      color: DANGER,
+      fontSize: 10.5,
+      lineHeight: 15,
+    },
+
+    passwordSuccessBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 7,
+      padding: 10,
+      marginTop: 2,
+      borderRadius: 11,
+      backgroundColor:
+        GREEN_SOFT,
+    },
+
+    passwordSuccessText: {
+      flex: 1,
+      color: GREEN,
+      fontSize: 10.5,
+      lineHeight: 15,
+    },
+
+    passwordActions: {
+      flexDirection: 'row',
+      justifyContent:
+        'flex-end',
+      gap: 9,
+      marginTop: 11,
+    },
+
+    passwordCancelButton: {
+      minHeight: 40,
+      paddingHorizontal: 14,
+      alignItems: 'center',
+      justifyContent:
+        'center',
+      borderWidth: 1,
+      borderColor: BORDER,
+      borderRadius: 11,
+      backgroundColor: WHITE,
+    },
+
+    passwordCancelText: {
+      color: MUTED,
+      fontSize: 11,
+      fontWeight: '700',
+    },
+
+    passwordSaveButton: {
+      minHeight: 40,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent:
+        'center',
+      gap: 7,
+      paddingHorizontal: 15,
+      borderRadius: 11,
+      backgroundColor: PURPLE,
+    },
+
+    passwordSaveText: {
+      color: WHITE,
+      fontSize: 11,
+      fontWeight: '800',
+    },
+
+    passwordButtonDisabled: {
+      opacity: 0.55,
+    },
+
+    passwordDemoNote: {
+      color: MUTED,
+      fontSize: 9.5,
+      lineHeight: 14,
+      marginTop: 10,
+    },
+
     sectionTitle: {
       color: NAVY,
 
@@ -1375,6 +1964,24 @@ const styles =
 
     dangerText: {
       color: DANGER,
+    },
+
+    preferencesLoadingBox: {
+      minHeight: 48,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      marginBottom: 10,
+      borderRadius: 14,
+      backgroundColor:
+        PURPLE_SOFT,
+    },
+
+    preferencesLoadingText: {
+      color: MUTED,
+      fontSize: 11,
+      fontWeight: '600',
     },
 
     saveWrapper: {
