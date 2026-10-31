@@ -3331,22 +3331,22 @@ export async function getPasses(forceRefresh = false) {
         const { invitation, event } = experience
         const eventDetails = eventById.get(event.id)
         return {
-        id: `invitation:${invitation.id}`,
-        eventId: event.id,
-        eventName: event.name,
-        startsAt: event.startsAt,
-        location: event.location ?? '',
-        passType: 'Invitación',
-        status: invitation.status === 'ACCEPTED'
-          ? 'ACTIVE'
-          : invitation.status === 'DECLINED'
-            ? 'DECLINED'
-            : 'PENDING',
-        qrValue: invitation.qrPayload ?? undefined,
-        accessStatus: invitation.checkedIn && invitation.checkedIn > 0
-          ? 'CHECKED_IN'
-          : 'OUTSIDE',
-        reentryAllowed: eventDetails?.reentryAllowed,
+          id: `invitation:${invitation.id}`,
+          eventId: event.id,
+          eventName: event.name,
+          startsAt: event.startsAt,
+          location: event.location ?? '',
+          passType: 'Invitación',
+          status: invitation.status === 'ACCEPTED'
+            ? 'ACTIVE'
+            : invitation.status === 'DECLINED'
+              ? 'DECLINED'
+              : 'PENDING',
+          qrValue: invitation.qrPayload ?? undefined,
+          accessStatus: invitation.checkedIn && invitation.checkedIn > 0
+            ? 'CHECKED_IN'
+            : 'OUTSIDE',
+          reentryAllowed: eventDetails?.reentryAllowed,
         }
       })
 
