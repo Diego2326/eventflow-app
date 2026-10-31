@@ -3,6 +3,10 @@ import {
   View,
 } from 'react-native'
 import {
+  initialWindowMetrics,
+  SafeAreaProvider,
+} from 'react-native-safe-area-context'
+import {
   useEffect,
   useState,
 } from 'react'
@@ -46,20 +50,18 @@ export default function App() {
     }
   }, [])
 
-  if (!ready) {
-    return (
-      <View style={styles.loading}>
-        <ActivityIndicator
-          size="large"
-          color="#6848E7"
-        />
-      </View>
-    )
-  }
-
   return (
-    <AppNavigator
-      signedIn={signedIn}
-    />
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+      {!ready ? (
+        <View style={styles.loading}>
+          <ActivityIndicator
+            size="large"
+            color="#6848E7"
+          />
+        </View>
+      ) : (
+        <AppNavigator signedIn={signedIn} />
+      )}
+    </SafeAreaProvider>
   )
 }

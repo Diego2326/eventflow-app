@@ -4,6 +4,7 @@ export type EventItem = {
   type: string
   startsAt: string
   location: string
+  reentryAllowed?: boolean
 }
 
 export type EventModule = {

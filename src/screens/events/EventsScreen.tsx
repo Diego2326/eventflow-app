@@ -274,8 +274,8 @@ export function EventsScreen({
           eventData,
           rsvpData,
         ] = await Promise.all([
-          getEvents(),
-          getRsvps(),
+          getEvents(refresh),
+          getRsvps(refresh),
         ])
 
         setItems(eventData)

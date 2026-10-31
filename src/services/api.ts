@@ -27,6 +27,72 @@ const BASE =
   'https://eventflow-backend-990072178406.us-east4.run.app/api'
 
 const API_REQUEST_TIMEOUT_MS = 15_000
+const API_READ_CACHE_TTL_MS = 15_000
+
+type ApiReadCacheEntry = {
+  hasValue: boolean
+  value?: unknown
+  expiresAt: number
+  pending?: Promise<unknown>
+}
+
+const apiReadCache = new Map<string, ApiReadCacheEntry>()
+
+function clearReadCache(...keys: string[]) {
+  if (keys.length === 0) {
+    apiReadCache.clear()
+    return
+  }
+
+  keys.forEach(key => apiReadCache.delete(key))
+}
+
+async function cachedRead<T>(
+  key: string,
+  load: () => Promise<T>,
+  forceRefresh = false,
+): Promise<T> {
+  const cached = apiReadCache.get(key)
+
+  if (cached?.pending) {
+    return cached.pending as Promise<T>
+  }
+
+  if (
+    !forceRefresh &&
+    cached?.hasValue &&
+    cached.expiresAt > Date.now()
+  ) {
+    return cached.value as T
+  }
+
+  const entry: ApiReadCacheEntry = {
+    hasValue: cached?.hasValue ?? false,
+    value: cached?.value,
+    expiresAt: cached?.expiresAt ?? 0,
+  }
+  const pending = load()
+  entry.pending = pending
+  apiReadCache.set(key, entry)
+
+  try {
+    const value = await pending
+    if (apiReadCache.get(key) === entry) {
+      apiReadCache.set(key, {
+        hasValue: true,
+        value,
+        expiresAt: Date.now() + API_READ_CACHE_TTL_MS,
+      })
+    }
+    return value
+  } catch (error) {
+    if (apiReadCache.get(key) === entry) {
+      if (cached?.hasValue) apiReadCache.set(key, cached)
+      else apiReadCache.delete(key)
+    }
+    throw error
+  }
+}
 
 export const DEMO_MODE =
   process.env.EXPO_PUBLIC_DEMO_MODE === 'true'
@@ -877,6 +943,7 @@ async function clearOfflinePasses() {
 
 async function clearLocalSession() {
   accessToken = null
+  clearReadCache()
 
   await Promise.all([
     sessionStorage.remove(
@@ -2097,6 +2164,7 @@ export async function login(
     )
   }
 
+  clearReadCache()
   await clearOfflinePasses()
   await saveTokens(
     await response.json(),
@@ -2634,16 +2702,18 @@ export async function updateProfilePreferences(
  * respetar este contrato HTTP.
  */
 
-export async function getEvents() {
+export async function getEvents(forceRefresh = false) {
   if (DEMO_MODE) {
     return request<EventItem[]>(EVENT_ENDPOINTS.events, 'GET')
   }
 
-  const events = await realRequest<ApiEvent[]>(EVENT_ENDPOINTS.events, 'GET')
-  return events.map(event => ({
-    ...event,
-    location: event.location ?? '',
-  }))
+  return cachedRead('events', async () => {
+    const events = await realRequest<ApiEvent[]>(EVENT_ENDPOINTS.events, 'GET')
+    return events.map(event => ({
+      ...event,
+      location: event.location ?? '',
+    }))
+  }, forceRefresh)
 }
 
 export async function getEventModules(
@@ -3152,10 +3222,7 @@ export async function getEventRsvp(
     )
   }
 
-  const invitations = await realRequest<ApiGuestExperience[]>(
-    '/invitations/mine',
-    'GET',
-  )
+  const invitations = await getMyGuestExperiences()
   const experience = invitations.find(item => item.event.id === eventId)
   if (!experience) {
     throw new Error('No hay una invitación vinculada a este evento.')
@@ -3163,15 +3230,20 @@ export async function getEventRsvp(
   return mapRsvp(experience)
 }
 
-export async function getRsvps() {
+async function getMyGuestExperiences(forceRefresh = false) {
+  return cachedRead(
+    'guest-experiences',
+    () => realRequest<ApiGuestExperience[]>('/invitations/mine', 'GET'),
+    forceRefresh,
+  )
+}
+
+export async function getRsvps(forceRefresh = false) {
   if (DEMO_MODE) {
     return request<EventRSVP[]>(EVENT_ENDPOINTS.rsvps, 'GET')
   }
 
-  const invitations = await realRequest<ApiGuestExperience[]>(
-    '/invitations/mine',
-    'GET',
-  )
+  const invitations = await getMyGuestExperiences(forceRefresh)
   return invitations.map(mapRsvp)
 }
 
@@ -3187,10 +3259,7 @@ export async function updateEventRsvp(
     )
   }
 
-  const invitations = await realRequest<ApiGuestExperience[]>(
-    '/invitations/mine',
-    'GET',
-  )
+  const invitations = await getMyGuestExperiences(true)
   const experience = invitations.find(item => item.event.id === eventId)
   if (!experience) {
     throw new Error('No hay una invitación vinculada a este evento.')
@@ -3208,6 +3277,7 @@ export async function updateEventRsvp(
     'POST',
     { accepted: input.status === 'CONFIRMED', companions },
   )
+  clearReadCache('guest-experiences', 'passes')
   return mapRsvp({ ...experience, invitation: updated })
 }
 
@@ -3242,31 +3312,25 @@ export async function getCapacities() {
   }))
 }
 
-export async function getPasses() {
+export async function getPasses(forceRefresh = false) {
   if (DEMO_MODE) {
     return request<EventPass[]>(EVENT_ENDPOINTS.passes, 'GET')
   }
 
-  try {
-    const [invitations, orders, events] = await Promise.all([
-      realRequest<ApiGuestExperience[]>('/invitations/mine', 'GET'),
-      realRequest<ApiTicketOrder[]>('/ticket-orders/mine', 'GET'),
-      realRequest<Array<{
-        id: string
-        name: string
-        type: string
-        startsAt: string
-        location?: string | null
-        reentryAllowed?: boolean
-      }>>('/events', 'GET'),
-    ])
-    const eventById = new Map<string, ApiEvent>()
-    events.forEach(event => eventById.set(event.id, event))
+  return cachedRead('passes', async () => {
+    try {
+      const [invitations, orders, events] = await Promise.all([
+        getMyGuestExperiences(forceRefresh),
+        realRequest<ApiTicketOrder[]>('/ticket-orders/mine', 'GET'),
+        getEvents(forceRefresh),
+      ])
+      const eventById = new Map<string, EventItem>()
+      events.forEach(event => eventById.set(event.id, event))
 
-    const invitationPasses = invitations.map((experience): EventPass => {
-      const { invitation, event } = experience
-      const eventDetails = eventById.get(event.id)
-      return {
+      const invitationPasses = invitations.map((experience): EventPass => {
+        const { invitation, event } = experience
+        const eventDetails = eventById.get(event.id)
+        return {
         id: `invitation:${invitation.id}`,
         eventId: event.id,
         eventName: event.name,
@@ -3283,48 +3347,54 @@ export async function getPasses() {
           ? 'CHECKED_IN'
           : 'OUTSIDE',
         reentryAllowed: eventDetails?.reentryAllowed,
+        }
+      })
+
+      const ticketPasses = orders.flatMap((order): EventPass[] => {
+        const event = eventById.get(order.eventId)
+        if (!event) return []
+        return order.tickets.map((ticket): EventPass => ({
+          id: `ticket:${ticket.id}`,
+          eventId: order.eventId,
+          eventName: event.name,
+          startsAt: event.startsAt,
+          location: event.location ?? '',
+          passType: ticket.typeName,
+          status: ticket.status === 'ACTIVE'
+            ? 'ACTIVE'
+            : ticket.status === 'CANCELLED'
+              ? 'REVOKED'
+              : 'USED',
+          qrValue: ticket.qrPayload ?? undefined,
+          accessStatus: ticket.checkedIn ? 'CHECKED_IN' : 'OUTSIDE',
+          reentryAllowed: event.reentryAllowed,
+        }))
+      })
+
+      const passes = [...invitationPasses, ...ticketPasses]
+        .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
+      await sessionStorage.set(OFFLINE_PASSES_KEY, JSON.stringify(passes)).catch(() => undefined)
+      return passes
+    } catch (error) {
+      const message = (error as Error).message || ''
+      if (
+        !message.includes('No se pudo conectar') &&
+        !message.includes('tardó más de 15 segundos')
+      ) {
+        throw error
       }
-    })
-
-    const ticketPasses = orders.flatMap((order): EventPass[] => {
-      const event = eventById.get(order.eventId)
-      if (!event) return []
-      return order.tickets.map((ticket): EventPass => ({
-        id: `ticket:${ticket.id}`,
-        eventId: order.eventId,
-        eventName: event.name,
-        startsAt: event.startsAt,
-        location: event.location ?? '',
-        passType: ticket.typeName,
-        status: ticket.status === 'ACTIVE'
-          ? 'ACTIVE'
-          : ticket.status === 'CANCELLED'
-            ? 'REVOKED'
-            : 'USED',
-        qrValue: ticket.qrPayload ?? undefined,
-        accessStatus: ticket.checkedIn ? 'CHECKED_IN' : 'OUTSIDE',
-        reentryAllowed: event.reentryAllowed,
-      }))
-    })
-
-    const passes = [...invitationPasses, ...ticketPasses]
-      .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
-    await sessionStorage.set(OFFLINE_PASSES_KEY, JSON.stringify(passes)).catch(() => undefined)
-    return passes
-  } catch (error) {
-    const message = (error as Error).message || ''
-    if (!message.includes('No se pudo conectar')) throw error
-    const raw = await sessionStorage.get(OFFLINE_PASSES_KEY)
-    if (!raw) throw error
-    try {
-      const cached = JSON.parse(raw)
-      if (!Array.isArray(cached)) throw error
-      return cached.filter(item => item && typeof item.id === 'string' && typeof item.eventId === 'string')
-        .map((item: EventPass) => ({ ...item, offlineCopy: true }))
-    } catch {
-      throw error
+      const raw = await sessionStorage.get(OFFLINE_PASSES_KEY)
+      if (!raw) throw error
+      try {
+        const cached = JSON.parse(raw)
+        if (!Array.isArray(cached)) throw error
+        return cached.filter(item => item && typeof item.id === 'string' && typeof item.eventId === 'string')
+          .map((item: EventPass) => ({ ...item, offlineCopy: true }))
+      } catch {
+        throw error
+      }
     }
-  }
+  }, forceRefresh)
 }
 
 export async function getPass(
@@ -3345,7 +3415,7 @@ export async function getPass(
  * =====================================================
  */
 
-export async function getNotifications() {
+export async function getNotifications(forceRefresh = false) {
   if (DEMO_MODE) {
     return demoNotificationState.map(
       item => ({
@@ -3354,28 +3424,30 @@ export async function getNotifications() {
     )
   }
 
-  const [personal, events] = await Promise.all([
-    realRequest<ApiNotification[]>(NOTIFICATION_ENDPOINTS.list, 'GET'),
-    getEvents(),
-  ])
-  const eventNotifications = await Promise.all(events.map(async event => {
-    try {
-      return await realRequest<ApiNotification[]>(
-        `/events/${event.id}/notifications`,
-        'GET',
-      )
-    } catch {
-      return []
-    }
-  }))
-  const unique = new Map<string, NotificationItem>()
-  personal.forEach(item => unique.set(item.id, mapNotification(item, 'PERSONAL')))
-  eventNotifications.flat().forEach(item => {
-    unique.set(item.id, mapNotification(item, 'EVENT'))
-  })
-  return [...unique.values()].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  )
+  return cachedRead('notifications', async () => {
+    const [personal, events] = await Promise.all([
+      realRequest<ApiNotification[]>(NOTIFICATION_ENDPOINTS.list, 'GET'),
+      getEvents(),
+    ])
+    const eventNotifications = await Promise.all(events.map(async event => {
+      try {
+        return await realRequest<ApiNotification[]>(
+          `/events/${event.id}/notifications`,
+          'GET',
+        )
+      } catch {
+        return []
+      }
+    }))
+    const unique = new Map<string, NotificationItem>()
+    personal.forEach(item => unique.set(item.id, mapNotification(item, 'PERSONAL')))
+    eventNotifications.flat().forEach(item => {
+      unique.set(item.id, mapNotification(item, 'EVENT'))
+    })
+    return [...unique.values()].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    )
+  }, forceRefresh)
 }
 
 export async function markNotificationRead(
@@ -3421,6 +3493,7 @@ export async function markNotificationRead(
     path,
     'POST',
   )
+  clearReadCache('notifications')
   return mapNotification(notification, source ?? 'PERSONAL')
 }
 
@@ -3454,6 +3527,7 @@ export async function markAllNotificationsRead() {
       'POST',
     )),
   ])
+  clearReadCache('notifications')
   return { success: true }
 }
 

@@ -89,8 +89,8 @@ export function HomeScreen({
           eventData,
           passData,
         ] = await Promise.all([
-          getEvents(),
-          getPasses(),
+          getEvents(refresh),
+          getPasses(refresh),
         ])
 
         setEvents(eventData)
