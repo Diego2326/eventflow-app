@@ -6,10 +6,20 @@ import {
   useEffect,
   useState,
 } from 'react'
+import * as Notifications from 'expo-notifications'
 
 import { AppNavigator } from './src/navigation/AppNavigator'
 import { restore } from './src/services/api'
 import { styles } from './src/theme/styles'
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+})
 
 export default function App() {
   const [ready, setReady] =

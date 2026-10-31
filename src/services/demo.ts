@@ -58,6 +58,38 @@ export const demoModules: EventModule[] = [
     featured: false,
     order: 4,
   },
+  {
+    code: 'QUE',
+    name: 'Cola de degustación',
+    category: 'Experiencia',
+    description: 'Reserva tu lugar y sigue tu turno.',
+    featured: true,
+    order: 5,
+  },
+  {
+    code: 'BKG',
+    name: 'Actividades',
+    category: 'Experiencia',
+    description: 'Consulta cupos y reserva actividades.',
+    featured: true,
+    order: 6,
+  },
+  {
+    code: 'INT',
+    name: 'Participa',
+    category: 'Comunidad',
+    description: 'Vota en encuestas y comparte preguntas.',
+    featured: true,
+    order: 7,
+  },
+  {
+    code: 'ORD',
+    name: 'Menú y pedidos',
+    category: 'Servicios',
+    description: 'Explora el menú y crea un pedido.',
+    featured: true,
+    order: 8,
+  },
 ]
 
 export const demoRsvps: EventRSVP[] = [
@@ -93,6 +125,7 @@ export const demoPasses: EventPass[] = [
     location: 'Casa Santo Domingo',
     passType: 'Invitado general',
     status: 'ACTIVE',
+    qrValue: 'eventflow://pass/demo-pass-1',
     accessStatus: 'OUTSIDE',
     reentryAllowed: true,
   },

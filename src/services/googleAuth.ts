@@ -98,6 +98,10 @@ export async function signInWithGoogle(): Promise<
   const result =
     await loginWithGoogleToken(
       idToken,
+      {
+        email: response.data.user.email,
+        name: response.data.user.name ?? undefined,
+      },
     )
 
   if (

@@ -24,6 +24,7 @@ import {
   getEventAgenda,
   getEventCapacity,
   getEventModules,
+  getEventPermissions,
   getEventRsvp,
   getPasses,
   updateEventRsvp,
@@ -37,6 +38,7 @@ import type {
   EventRSVP,
   RSVPStatus,
 } from '../../types/events'
+import type { EventPermissions } from '../../services/api'
 
 const NAVY = '#0B1D3A'
 
@@ -100,6 +102,11 @@ export function EventHomeScreen({
   const [modules, setModules] =
     useState<EventModule[] | null>(null)
 
+  const [staffPermissions, setStaffPermissions] = useState<EventPermissions | null>(null)
+
+  const [showAllModules, setShowAllModules] =
+    useState(false)
+
   const [error, setError] =
     useState('')
 
@@ -137,9 +144,27 @@ export function EventHomeScreen({
         pass.eventId === event.id,
     ) ?? null
 
+  const staffAccess = staffPermissions && (
+    staffPermissions.owner ||
+    staffPermissions.permissions.includes('ALL') ||
+    staffPermissions.permissions.some(permission =>
+      ['CHECK_IN', 'GUESTS', 'ASSISTANCE', 'FILES'].includes(permission) || permission.startsWith('ASSISTANCE:'),
+    )
+  )
+
+  const visibleModules = modules
+    ? showAllModules
+      ? modules
+      : (modules.filter(module => module.featured).length
+          ? modules.filter(module => module.featured)
+          : modules
+        ).slice(0, 4)
+    : []
+
   useEffect(() => {
     setError('')
     setModules(null)
+    setShowAllModules(false)
 
     getEventModules(event.id)
       .then(setModules)
@@ -149,6 +174,14 @@ export function EventHomeScreen({
           (error as Error).message,
         )
       })
+  }, [event.id])
+
+  useEffect(() => {
+    let mounted = true
+    getEventPermissions(event.id)
+      .then(value => { if (mounted) setStaffPermissions(value) })
+      .catch(() => { if (mounted) setStaffPermissions(null) })
+    return () => { mounted = false }
   }, [event.id])
 
   useEffect(() => {
@@ -325,11 +358,17 @@ export function EventHomeScreen({
     )
   }
 
-  function comingSoon(name: string) {
-    Alert.alert(
-      name,
-      'Esta función estará disponible cuando conectemos el módulo correspondiente.',
-    )
+  function openModule(module: EventModule) {
+    const code = module.code.toUpperCase()
+    if (code === 'ACCESS') {
+      navigation.navigate('Mis pases')
+      return
+    }
+    if (code === 'NEWS') {
+      navigation.navigate('Notificaciones')
+      return
+    }
+    navigation.navigate('Módulo del evento', { event, module })
   }
 
   return (
@@ -356,17 +395,9 @@ export function EventHomeScreen({
 
         <Pressable
           style={styles.headerButton}
-          onPress={() =>
-            comingSoon(
-              'Opciones del evento',
-            )
-          }
+          onPress={() => navigation.navigate('Notificaciones')}
         >
-          <Feather
-            name="more-horizontal"
-            size={25}
-            color={NAVY}
-          />
+          <Feather name="bell" size={21} color={NAVY} />
         </Pressable>
       </View>
 
@@ -748,9 +779,11 @@ export function EventHomeScreen({
               {passes === null
                 ? 'Consultando información'
                 : eventPass
-                  ? eventPass.qrValue
-                    ? 'Pase digital disponible'
-                    : 'Pase registrado · QR pendiente'
+                  ? eventPass.offlineCopy
+                    ? 'Copia guardada · valida el pase en línea'
+                    : eventPass.qrValue
+                      ? 'Pase digital disponible'
+                      : 'Pase registrado · QR pendiente'
                   : 'No hay un pase asociado a este evento'}
             </Text>
           </View>
@@ -782,88 +815,68 @@ export function EventHomeScreen({
           />
         </Pressable>
 
-        {/* ACCESOS RÁPIDOS */}
-        <View style={styles.quickRow}>
-          <Pressable
-            style={({ pressed }) => [
-              styles.quickButton,
-              pressed && styles.pressed,
-            ]}
-            onPress={() =>
-              comingSoon('Agenda')
-            }
-          >
-            <Feather
-              name="file-text"
-              size={25}
-              color={NAVY}
-            />
-
-            <Text style={styles.quickText}>
-              Agenda
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.quickButton,
-              pressed && styles.pressed,
-            ]}
-            onPress={() =>
-              comingSoon('Networking')
-            }
-          >
-            <Feather
-              name="users"
-              size={26}
-              color={NAVY}
-            />
-
-            <Text style={styles.quickText}>
-              Networking
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.quickButton,
-              pressed && styles.pressed,
-            ]}
-            onPress={() =>
-              comingSoon('Preguntas')
-            }
-          >
-            <Feather
-              name="message-circle"
-              size={25}
-              color={NAVY}
-            />
-
-            <Text style={styles.quickText}>
-              Preguntas
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.quickButton,
-              pressed && styles.pressed,
-            ]}
-            onPress={() =>
-              comingSoon('Galería')
-            }
-          >
-            <Feather
-              name="image"
-              size={25}
-              color={NAVY}
-            />
-
-            <Text style={styles.quickText}>
-              Galería
-            </Text>
-          </Pressable>
+        <View style={styles.exploreHeader}>
+          <View>
+            <Text style={styles.activitiesTitle}>Explora el evento</Text>
+            <Text style={styles.liveNote}>Herramientas y servicios disponibles</Text>
+          </View>
+          {modules?.length ? <Text style={styles.moduleCount}>{modules.length} módulos</Text> : null}
         </View>
+
+        {staffAccess ? (
+          <Pressable accessibilityRole="button" onPress={() => navigation.navigate('Centro del personal', { event })} style={({ pressed }) => [styles.staffEntry, pressed && styles.pressed]}>
+            <View style={styles.staffEntryIcon}><Feather name="briefcase" size={17} color={PURPLE} /></View>
+            <View style={styles.staffEntryCopy}><Text style={styles.staffEntryTitle}>Centro del personal</Text><Text style={styles.staffEntryDescription}>Acceso, invitados, ayuda y moderación</Text></View>
+            <Feather name="chevron-right" size={18} color={MUTED} />
+          </Pressable>
+        ) : null}
+
+        {!modules ? (
+          <View style={styles.moduleLoading}>
+            <ActivityIndicator size="small" color={PURPLE} />
+            <Text style={styles.loadingText}>Cargando módulos…</Text>
+          </View>
+        ) : modules.length ? (
+          <View style={styles.moduleGrid}>
+            {visibleModules.map(module => {
+              const code = module.code.toUpperCase()
+              const icon = code === 'AGENDA' ? 'calendar' : code === 'ACCESS' ? 'credit-card' : code === 'NEWS' ? 'bell' : code === 'MAP' ? 'map' : code === 'QUE' ? 'users' : code === 'BKG' ? 'clock' : code === 'INT' ? 'message-circle' : code === 'ORD' ? 'shopping-bag' : code === 'GAL' ? 'image' : code === 'NET' ? 'user-plus' : code === 'AST' ? 'life-buoy' : 'grid'
+              return (
+                <Pressable
+                  key={module.code}
+                  accessibilityRole="button"
+                  onPress={() => openModule(module)}
+                  style={({ pressed }) => [styles.moduleCard, pressed && styles.pressed]}
+                >
+                  <View style={styles.moduleIcon}>
+                    <Feather name={icon} size={19} color={PURPLE} />
+                  </View>
+                  <View style={styles.moduleCopy}>
+                    <Text style={styles.moduleName} numberOfLines={1}>{module.name}</Text>
+                    <Text style={styles.moduleDescription} numberOfLines={2}>{module.description || module.category || 'Explora este módulo'}</Text>
+                  </View>
+                  <Feather name="chevron-right" size={18} color={MUTED} />
+                </Pressable>
+              )
+            })}
+          </View>
+        ) : (
+          <View style={styles.moduleEmpty}>
+            <Feather name="grid" size={20} color={MUTED} />
+            <Text style={styles.moduleEmptyText}>Este evento todavía no tiene módulos publicados.</Text>
+          </View>
+        )}
+
+        {modules && modules.length > visibleModules.length ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setShowAllModules(value => !value)}
+            style={styles.showAllModules}
+          >
+            <Text style={styles.showAllModulesText}>{showAllModules ? 'Mostrar menos' : `Ver los ${modules.length} módulos`}</Text>
+            <Feather name={showAllModules ? 'chevron-up' : 'chevron-down'} size={16} color={PURPLE} />
+          </Pressable>
+        ) : null}
 
         {/* AHORA / SIGUIENTE */}
         <View style={styles.liveHeader}>
@@ -1632,6 +1645,131 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: WHITE,
     marginRight: 5,
+  },
+
+  exploreHeader: {
+    marginTop: 22,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
+  moduleCount: {
+    color: MUTED,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+
+  staffEntry: {
+    minHeight: 60,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    borderWidth: 1,
+    borderColor: '#DDD7FA',
+    borderRadius: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FCFBFF',
+  },
+
+  staffEntryIcon: {
+    width: 37,
+    height: 37,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: PURPLE_SOFT,
+  },
+
+  staffEntryCopy: { flex: 1, gap: 3 },
+  staffEntryTitle: { color: NAVY, fontSize: 11, fontWeight: '800' },
+  staffEntryDescription: { color: MUTED, fontSize: 9 },
+
+  moduleGrid: {
+    gap: 9,
+  },
+
+  moduleCard: {
+    minHeight: 70,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    backgroundColor: WHITE,
+  },
+
+  moduleIcon: {
+    width: 39,
+    height: 39,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: PURPLE_SOFT,
+  },
+
+  moduleCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  moduleName: {
+    color: NAVY,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+
+  moduleDescription: {
+    color: MUTED,
+    fontSize: 10,
+    lineHeight: 14,
+    marginTop: 3,
+  },
+
+  moduleLoading: {
+    minHeight: 65,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
+  },
+
+  moduleEmpty: {
+    minHeight: 74,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    backgroundColor: SOFT,
+  },
+
+  moduleEmptyText: {
+    color: MUTED,
+    fontSize: 11,
+    textAlign: 'center',
+  },
+
+  showAllModules: {
+    minHeight: 40,
+    marginTop: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+
+  showAllModulesText: {
+    color: PURPLE,
+    fontSize: 11,
+    fontWeight: '800',
   },
 
   quickRow: {

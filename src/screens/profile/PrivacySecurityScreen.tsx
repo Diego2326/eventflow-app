@@ -38,7 +38,7 @@ import {
 } from '../../services/api'
 
 import type {
-  ProfileVisibility,
+  ProfilePreferences,
 } from '../../services/api'
 
 const NAVY = '#0B1D3A'
@@ -298,22 +298,11 @@ export function PrivacySecurityScreen({
   const insets =
     useSafeAreaInsets()
 
-  const [
-    personalizationEnabled,
-    setPersonalizationEnabled,
-  ] = useState(false)
-
-  const [
-    eventCommunicationsEnabled,
-    setEventCommunicationsEnabled,
-  ] = useState(true)
-
-  const [
-    profileVisibility,
-    setProfileVisibility,
-  ] = useState<ProfileVisibility>(
-    'EVENT_PARTICIPANTS',
-  )
+  const [networkingPreferences, setNetworkingPreferences] =
+    useState<ProfilePreferences>({
+      networkingProfileVisible: true,
+      networkingContactVisible: true,
+    })
 
   const [
     preferencesLoading,
@@ -426,18 +415,7 @@ export function PrivacySecurityScreen({
             )
           }
 
-          setPersonalizationEnabled(
-            preferences
-              .personalizationEnabled,
-          )
-          setEventCommunicationsEnabled(
-            preferences
-              .eventCommunicationsEnabled,
-          )
-          setProfileVisibility(
-            preferences
-              .profileVisibility,
-          )
+          setNetworkingPreferences(preferences)
           setHasChanges(false)
         },
       )
@@ -460,35 +438,14 @@ export function PrivacySecurityScreen({
     }
   }, [])
 
-  function updatePersonalization(
+  function updateNetworkingPreference(
+    key: keyof ProfilePreferences,
     value: boolean,
   ) {
-    setPersonalizationEnabled(
-      value,
-    )
-
-    setHasChanges(true)
-  }
-
-  function updateCommunications(
-    value: boolean,
-  ) {
-    setEventCommunicationsEnabled(
-      value,
-    )
-
-    setHasChanges(true)
-  }
-
-  function toggleProfileVisibility() {
-    setProfileVisibility(
-      current =>
-        current ===
-        'EVENT_PARTICIPANTS'
-          ? 'PRIVATE'
-          : 'EVENT_PARTICIPANTS',
-    )
-
+    setNetworkingPreferences(current => ({
+      ...current,
+      [key]: value,
+    }))
     setHasChanges(true)
   }
 
@@ -639,22 +596,9 @@ export function PrivacySecurityScreen({
 
     try {
       const updated =
-        await updateProfilePreferences({
-          personalizationEnabled,
-          eventCommunicationsEnabled,
-          profileVisibility,
-        })
+        await updateProfilePreferences(networkingPreferences)
 
-      setPersonalizationEnabled(
-        updated.personalizationEnabled,
-      )
-      setEventCommunicationsEnabled(
-        updated
-          .eventCommunicationsEnabled,
-      )
-      setProfileVisibility(
-        updated.profileVisibility,
-      )
+      setNetworkingPreferences(updated)
       setHasChanges(false)
 
       Alert.alert(
@@ -1305,38 +1249,20 @@ export function PrivacySecurityScreen({
         >
           <PrivacyRow
             icon="eye"
-            title="Visibilidad del perfil"
-            value={
-              profileVisibility ===
-              'EVENT_PARTICIPANTS'
-                ? 'Solo asistentes'
-                : 'Privado'
-            }
-            onPress={
-              toggleProfileVisibility
-            }
-          />
-
-          <PrivacyRow
-            icon="bar-chart-2"
-            title="Uso de datos para personalización"
+            title="Mostrar mi perfil en networking"
             switchValue={
-              personalizationEnabled
+              networkingPreferences.networkingProfileVisible
             }
-            onSwitchChange={
-              updatePersonalization
-            }
+            onSwitchChange={value => updateNetworkingPreference('networkingProfileVisible', value)}
           />
 
           <PrivacyRow
             icon="mail"
-            title="Permitir comunicaciones del evento"
+            title="Mostrar mis datos de contacto"
             switchValue={
-              eventCommunicationsEnabled
+              networkingPreferences.networkingContactVisible
             }
-            onSwitchChange={
-              updateCommunications
-            }
+            onSwitchChange={value => updateNetworkingPreference('networkingContactVisible', value)}
           />
 
         </View>

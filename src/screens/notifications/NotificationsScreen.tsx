@@ -356,6 +356,8 @@ export function NotificationsScreen({
     try {
       await markNotificationRead(
         id,
+        target.eventId,
+        target.source,
       )
     } catch (error) {
       setNotifications(current)

@@ -15,6 +15,7 @@ import {
 
 import { StatusBar } from 'expo-status-bar'
 import { Feather } from '@expo/vector-icons'
+import { DigitalPassQr } from '../../components/ui/DigitalPassQr'
 
 import {
   SafeAreaView,
@@ -63,6 +64,13 @@ function statusInfo(
         background: '#FFF6E5',
       }
 
+    case 'DECLINED':
+      return {
+        label: 'No asistiré',
+        color: DANGER,
+        background: '#FFF0F1',
+      }
+
     case 'USED':
       return {
         label: 'Utilizado',
@@ -102,6 +110,10 @@ function accessLabel(
 ) {
   if (pass.status === 'REVOKED') {
     return 'Acceso revocado'
+  }
+
+  if (pass.status === 'DECLINED') {
+    return 'Invitación declinada'
   }
 
   switch (pass.accessStatus) {
@@ -217,32 +229,29 @@ export function MisPasesScreen({
   const [error, setError] =
     useState(false)
 
+  const [expandedPassId, setExpandedPassId] =
+    useState<string | null>(null)
+
   useEffect(() => {
-    Promise.all([
+    let mounted = true
+    Promise.allSettled([
       getPasses(),
       getRsvps(),
       getCapacities(),
     ])
-      .then(
-        ([
-          passData,
-          rsvpData,
-          capacityData,
-        ]) => {
-          setPasses(passData)
-          setRsvps(rsvpData)
-          setCapacities(
-            capacityData,
-          )
+      .then(([passesResult, rsvpsResult, capacitiesResult]) => {
+        if (!mounted) return
+        if (passesResult.status === 'fulfilled') {
+          setPasses(passesResult.value)
           setError(false)
-        },
-      )
-      .catch(() => {
-        setPasses([])
-        setRsvps([])
-        setCapacities([])
-        setError(true)
+        } else {
+          setPasses([])
+          setError(true)
+        }
+        setRsvps(rsvpsResult.status === 'fulfilled' ? rsvpsResult.value : [])
+        setCapacities(capacitiesResult.status === 'fulfilled' ? capacitiesResult.value : [])
       })
+    return () => { mounted = false }
   }, [])
 
   const activePasses =
@@ -304,6 +313,11 @@ export function MisPasesScreen({
     return (
       <Pressable
         key={pass.id}
+        onPress={() => {
+          if (pass.qrValue && pass.status === 'ACTIVE') {
+            setExpandedPassId(current => current === pass.id ? null : pass.id)
+          }
+        }}
         style={({ pressed }) => [
           styles.passCard,
           pressed &&
@@ -372,6 +386,8 @@ export function MisPasesScreen({
             </Text>
           </View>
         </View>
+
+        {pass.offlineCopy ? <View style={styles.offlineNotice}><Feather name="wifi-off" size={14} color="#946315" /><Text style={styles.offlineNoticeText}>Copia guardada en este dispositivo. El pase puede haberse actualizado o revocado mientras estabas sin conexión.</Text></View> : null}
 
         <View
           style={
@@ -540,7 +556,7 @@ export function MisPasesScreen({
             styles.passFooter
           }
         >
-          {pass.qrValue ? (
+          {pass.qrValue && pass.status === 'ACTIVE' ? (
             <View
               style={
                 styles.qrAvailable
@@ -557,8 +573,13 @@ export function MisPasesScreen({
                   styles.qrAvailableText
                 }
               >
-                Pase digital disponible
+                {pass.offlineCopy ? 'Toca para mostrar tu QR guardado' : 'Toca para mostrar tu QR'}
               </Text>
+            </View>
+          ) : pass.qrValue ? (
+            <View style={styles.qrPending}>
+              <Feather name="clock" size={17} color={WARNING} />
+              <Text style={styles.qrPendingText}>El QR se activará cuando confirmes tu invitación</Text>
             </View>
           ) : (
             <View
@@ -582,8 +603,23 @@ export function MisPasesScreen({
             </View>
           )}
 
-          <View style={styles.footerSpacer} />
+          {pass.qrValue && pass.status === 'ACTIVE' ? (
+            <Feather
+              name={expandedPassId === pass.id ? 'chevron-up' : 'chevron-down'}
+              size={18}
+              color={PURPLE}
+            />
+          ) : null}
         </View>
+
+        {expandedPassId === pass.id && pass.qrValue ? (
+          <View style={styles.qrExpanded}>
+            <DigitalPassQr value={pass.qrValue} size={196} />
+            <Text style={styles.qrHint}>
+              {pass.offlineCopy ? 'Copia guardada. El equipo debe validar el pase con conexión antes de registrar el acceso.' : 'Muestra este código al personal de acceso para registrar tu entrada.'}
+            </Text>
+          </View>
+        ) : null}
       </Pressable>
     )
   }
@@ -1087,6 +1123,25 @@ const styles =
       fontWeight: '700',
     },
 
+    offlineNotice: {
+      minHeight: 43,
+      marginTop: 10,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      borderRadius: 11,
+      backgroundColor: '#FFF7E8',
+    },
+
+    offlineNoticeText: {
+      flex: 1,
+      color: '#80580F',
+      fontSize: 9,
+      lineHeight: 14,
+    },
+
     divider: {
       height: 1,
       backgroundColor: BORDER,
@@ -1212,9 +1267,21 @@ const styles =
       fontWeight: '700',
     },
 
-    footerSpacer: {
-      width: 1,
-      height: 1,
+    qrExpanded: {
+      marginTop: 17,
+      paddingTop: 17,
+      borderTopWidth: 1,
+      borderTopColor: BORDER,
+      alignItems: 'center',
+      gap: 12,
+    },
+
+    qrHint: {
+      maxWidth: 260,
+      color: MUTED,
+      fontSize: 11,
+      lineHeight: 16,
+      textAlign: 'center',
     },
 
     qrPending: {

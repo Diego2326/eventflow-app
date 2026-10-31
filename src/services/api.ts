@@ -1,4 +1,5 @@
 import { sessionStorage } from './sessionStorage'
+import { Platform } from 'react-native'
 
 import {
   DEMO_EMAIL,
@@ -40,12 +41,140 @@ let demoPassState: EventPass[] =
     ...item,
   }))
 
+const demoAgendaFavorites = new Set<string>()
+let demoAssistance: AssistanceRequest[] = []
+
 type TokenPair = {
   accessToken: string
   refreshToken: string
 }
 
 type JsonRecord = Record<string, unknown>
+
+export type ModuleRecord = {
+  id: string
+  eventId: string
+  moduleCode: string
+  recordType: string
+  ownerUserId?: string | null
+  parentRecordId?: string | null
+  status: string
+  title?: string | null
+  payload: Record<string, unknown>
+  capacity?: number | null
+  currentCount: number
+  startsAt?: string | null
+  endsAt?: string | null
+  createdAt: string
+}
+
+export type ModuleAction = {
+  id: string
+  recordId: string
+  actorUserId?: string | null
+  action: string
+  payload: Record<string, unknown>
+  createdAt: string
+  quantity: number
+}
+
+export type QueuePosition = {
+  recordId: string
+  position: number | null
+  peopleAhead: number
+  waiting: number
+}
+
+export type EventPermissions = {
+  eventId: string
+  owner: boolean
+  permissions: string[]
+}
+
+export type EventInvitation = {
+  id: string
+  eventId: string
+  guestName: string
+  guestEmail?: string | null
+  status: string
+  allowedCapacity: number
+  companions: string[]
+  table?: string | null
+  seat?: string | null
+  sector?: string | null
+  checkedIn?: number
+  qrPayload?: string | null
+  members?: Array<{ index: number; name: string; inside: boolean | null }>
+}
+
+export type AssistanceRequest = {
+  id: string
+  eventId: string
+  invitationId?: string | null
+  requesterUserId?: string | null
+  assignedUserId?: string | null
+  category: string
+  details?: string | null
+  location?: string | null
+  priority: number
+  status: 'RECEIVED' | 'ACCEPTED' | 'ON_THE_WAY' | 'ATTENDED' | 'CANCELLED'
+  createdAt: string
+  updatedAt: string
+}
+
+export type EventFile = {
+  id: string
+  eventId: string
+  moduleCode: string
+  originalName: string
+  contentType: string
+  sizeBytes: number
+  downloadUrl: string
+  moderationStatus: 'PENDING' | 'ACTIVE' | 'REJECTED'
+  recipientUserId?: string | null
+  official: boolean
+}
+
+export type MapSearchResult = {
+  id: string
+  moduleCode: string
+  type: string
+  title?: string | null
+  payload: Record<string, unknown>
+}
+
+export type PublicInvitationExperience = {
+  invitation: {
+    id: string
+    eventId: string
+    guestName: string
+    guestEmail?: string | null
+    status: string
+    allowedCapacity: number
+    companions: string[]
+    table?: string | null
+    seat?: string | null
+    sector?: string | null
+    qrPayload?: string | null
+  }
+  event: {
+    id: string
+    name: string
+    type: string
+    description?: string | null
+    startsAt: string
+    endsAt?: string | null
+    timezone: string
+    location?: string | null
+    status: string
+  }
+  modules: Array<Pick<EventModule, 'code' | 'name' | 'category' | 'description' | 'order' | 'featured'> & { configuration?: Record<string, unknown> }>
+  agenda: EventAgendaActivity[]
+  now?: EventAgendaActivity | null
+  next?: EventAgendaActivity | null
+  notifications: Array<{ id: string; title: string; body: string; createdAt: string }>
+  mapPoints: Array<{ id: string; type: string; title?: string | null; payload: Record<string, unknown> }>
+}
 
 export type AuthUser = {
   id: string
@@ -104,18 +233,13 @@ export type UpdateProfileInput = {
   phone?: string
 }
 
-export type ProfileVisibility =
-  | 'PRIVATE'
-  | 'EVENT_PARTICIPANTS'
-
 export type ProfilePreferences = {
-  personalizationEnabled: boolean
-  eventCommunicationsEnabled: boolean
-  profileVisibility: ProfileVisibility
+  networkingProfileVisible: boolean
+  networkingContactVisible: boolean
 }
 
 export type UpdateProfilePreferencesInput =
-  Partial<ProfilePreferences>
+  ProfilePreferences
 
 export type NotificationKind =
   | 'GENERAL'
@@ -140,6 +264,7 @@ export type NotificationItem = {
   audience: string
   eventId?: string
   moduleCode?: string
+  source?: 'PERSONAL' | 'EVENT'
 }
 
 export const AUTH_ENDPOINTS = {
@@ -159,24 +284,24 @@ export const AUTH_ENDPOINTS = {
     '/auth/reset-password',
   changePassword:
     '/auth/change-password',
-  me: '/auth/me',
-  profile: '/profiles/me',
+  me: '/profile',
+  profile: '/profile',
 } as const
 
 export const PROFILE_ENDPOINTS = {
-  me: '/profiles/me',
-  preferences:
-    '/profiles/me/preferences',
+  me: '/profile',
+  preferences: '/profile/privacy',
 } as const
 
 export const NOTIFICATION_ENDPOINTS = {
-  list: '/notifications',
+  list: '/profile/notifications',
 
-  read: (notificationId: string) =>
-    `/notifications/${notificationId}/read`,
-
-  readAll:
-    '/notifications/read-all',
+  readPersonal: (notificationId: string) =>
+    `/profile/notifications/${notificationId}/read`,
+  readEvent: (eventId: string, notificationId: string) =>
+    `/events/${eventId}/notifications/${notificationId}/read`,
+  readAllEvent: (eventId: string) =>
+    `/events/${eventId}/notifications/read-all`,
 } as const
 
 export const EVENT_ENDPOINTS = {
@@ -233,11 +358,11 @@ const DEMO_BUILTIN_PASSWORD_KEY =
 const DEMO_BUILTIN_PROFILE_KEY =
   'demoBuiltinProfile'
 
+const OFFLINE_PASSES_KEY = 'offlineEventPasses'
+
 let demoProfilePreferences: ProfilePreferences = {
-  personalizationEnabled: false,
-  eventCommunicationsEnabled: true,
-  profileVisibility:
-    'EVENT_PARTICIPANTS',
+  networkingProfileVisible: true,
+  networkingContactVisible: true,
 }
 
 let demoNotificationState: NotificationItem[] = [
@@ -295,6 +420,135 @@ let demoNotificationState: NotificationItem[] = [
     moduleCode: 'agenda',
   },
 ]
+
+let demoModuleRecords: ModuleRecord[] = demoEvents.flatMap(event => {
+  const createdAt = new Date().toISOString()
+  const activityStartsAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
+  const activityEndsAt = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString()
+  const prefix = `demo-${event.id}`
+
+  return [
+    {
+      id: `${prefix}-queue`,
+      eventId: event.id,
+      moduleCode: 'QUE',
+      recordType: 'QUEUE',
+      status: 'ACTIVE',
+      title: 'Degustación de temporada',
+      payload: { description: 'Únete a la fila y consulta tu turno desde aquí.' },
+      capacity: 40,
+      currentCount: 0,
+      createdAt,
+    },
+    {
+      id: `${prefix}-activity`,
+      eventId: event.id,
+      moduleCode: 'BKG',
+      recordType: 'ACTIVITY',
+      status: 'ACTIVE',
+      title: 'Taller de sabores locales',
+      payload: { description: 'Una experiencia guiada para descubrir ingredientes de la región.' },
+      capacity: 24,
+      currentCount: 7,
+      startsAt: activityStartsAt,
+      endsAt: activityEndsAt,
+      createdAt,
+    },
+    {
+      id: `${prefix}-poll`,
+      eventId: event.id,
+      moduleCode: 'INT',
+      recordType: 'POLL',
+      status: 'ACTIVE',
+      title: '¿Qué experiencia te interesa más?',
+      payload: {
+        options: [
+          { id: 'taller', label: 'Talleres en vivo' },
+          { id: 'degustacion', label: 'Degustación' },
+          { id: 'musica', label: 'Música y ambiente' },
+        ],
+        allowMultiple: false,
+        resultsPublished: false,
+      },
+      currentCount: 0,
+      createdAt,
+    },
+    {
+      id: `${prefix}-question-board`,
+      eventId: event.id,
+      moduleCode: 'INT',
+      recordType: 'QUESTION_BOARD',
+      status: 'ACTIVE',
+      title: 'Preguntas para el equipo',
+      payload: { moderationRequired: false, allowVotes: true },
+      currentCount: 0,
+      createdAt,
+    },
+    {
+      id: `${prefix}-category-food`,
+      eventId: event.id,
+      moduleCode: 'ORD',
+      recordType: 'MENU_CATEGORY',
+      status: 'ACTIVE',
+      title: 'Para compartir',
+      payload: { description: 'Selección de la casa' },
+      currentCount: 0,
+      createdAt,
+    },
+    {
+      id: `${prefix}-category-drink`,
+      eventId: event.id,
+      moduleCode: 'ORD',
+      recordType: 'MENU_CATEGORY',
+      status: 'ACTIVE',
+      title: 'Bebidas',
+      payload: {},
+      currentCount: 0,
+      createdAt,
+    },
+    {
+      id: `${prefix}-item-tostadas`,
+      eventId: event.id,
+      moduleCode: 'ORD',
+      recordType: 'MENU_ITEM',
+      parentRecordId: `${prefix}-category-food`,
+      status: 'ACTIVE',
+      title: 'Tostadas de aguacate',
+      payload: { price: 38, available: true, description: 'Aguacate, hierbas frescas y tomate.' },
+      capacity: 30,
+      currentCount: 0,
+      createdAt,
+    },
+    {
+      id: `${prefix}-item-tamalitos`,
+      eventId: event.id,
+      moduleCode: 'ORD',
+      recordType: 'MENU_ITEM',
+      parentRecordId: `${prefix}-category-food`,
+      status: 'ACTIVE',
+      title: 'Tamalitos de chipilín',
+      payload: { price: 32, available: true, description: 'Receta tradicional, recién preparados.' },
+      capacity: 30,
+      currentCount: 0,
+      createdAt,
+    },
+    {
+      id: `${prefix}-item-limonada`,
+      eventId: event.id,
+      moduleCode: 'ORD',
+      recordType: 'MENU_ITEM',
+      parentRecordId: `${prefix}-category-drink`,
+      status: 'ACTIVE',
+      title: 'Limonada con hierbabuena',
+      payload: { price: 18, available: true, description: 'Preparada al momento.' },
+      capacity: 50,
+      currentCount: 0,
+      createdAt,
+    },
+  ]
+})
+
+let demoModuleActions: ModuleAction[] = []
 
 function normalizeEmail(
   value: string,
@@ -584,6 +838,8 @@ async function saveDemoCurrentUser(
 async function saveDemoSession(
   user: DemoPublicUser,
 ) {
+  await clearOfflinePasses()
+
   await saveTokens({
     accessToken:
       `demo-access-token:${user.email}`,
@@ -611,6 +867,12 @@ async function saveTokens(
   ])
 }
 
+async function clearOfflinePasses() {
+  await sessionStorage.remove(
+    OFFLINE_PASSES_KEY,
+  )
+}
+
 async function clearLocalSession() {
   accessToken = null
 
@@ -624,6 +886,7 @@ async function clearLocalSession() {
     sessionStorage.remove(
       DEMO_CURRENT_USER_KEY,
     ),
+    sessionStorage.remove(OFFLINE_PASSES_KEY),
   ])
 }
 
@@ -663,6 +926,161 @@ function asRecord(
   }
 
   return value as JsonRecord
+}
+
+type ApiProfile = {
+  id: string
+  name: string
+  email: string
+  phoneNumber?: string | null
+  status: string
+  roles?: string[]
+}
+
+function mapApiProfile(value: unknown): AuthUser {
+  const profile = asRecord(value) as ApiProfile
+  const status = profile.status === 'PENDING_VERIFICATION'
+    ? 'PENDING'
+    : profile.status === 'DELETION_PENDING'
+      ? 'ACTIVE'
+      : profile.status
+
+  return {
+    id: profile.id,
+    name: profile.name,
+    email: profile.email,
+    phone: profile.phoneNumber ?? '',
+    roles: profile.roles ?? [],
+    status: status as AuthUser['status'],
+    provider: 'password',
+  }
+}
+
+type ApiGuestExperience = {
+  invitation: {
+    id: string
+    eventId: string
+    status: string
+    allowedCapacity: number
+    companions: string[]
+    qrPayload?: string | null
+    checkedIn?: number
+  }
+  event: {
+    id: string
+    name: string
+    startsAt: string
+    location?: string | null
+    reentryAllowed?: boolean
+  }
+}
+
+type ApiAgendaItem = {
+  id: string
+  eventId: string
+  title: string
+  description?: string | null
+  startsAt: string
+  endsAt: string
+  zone?: string | null
+  responsible?: string | null
+  status?: string
+}
+
+type ApiEvent = {
+  id: string
+  name: string
+  type: string
+  startsAt: string
+  location?: string | null
+  reentryAllowed?: boolean
+}
+
+function mapAgenda(
+  items: ApiAgendaItem[],
+  moments: { now: ApiAgendaItem | null; next: ApiAgendaItem | null },
+  eventId: string,
+): EventAgenda {
+  const currentId = moments.now?.id
+  const nextId = moments.next?.id
+  const now = Date.now()
+  const activities: EventAgendaActivity[] = items
+    .filter(item => item.status !== 'CANCELLED')
+    .map((item): EventAgendaActivity => ({
+      id: item.id,
+      eventId: item.eventId,
+      title: item.title,
+      startsAt: item.startsAt,
+      endsAt: item.endsAt,
+      location: item.zone ?? undefined,
+      detail: item.description ?? item.responsible ?? undefined,
+      status: item.id === currentId
+        ? 'NOW'
+        : item.id === nextId || new Date(item.startsAt).getTime() > now
+          ? 'UPCOMING'
+          : 'FINISHED',
+    }))
+
+  return {
+    eventId,
+    current: activities.find(item => item.id === currentId) ?? null,
+    next: activities.find(item => item.id === nextId) ?? null,
+    activities,
+  }
+}
+
+type ApiTicketOrder = {
+  eventId: string
+  tickets: Array<{
+    id: string
+    typeName: string
+    status: string
+    checkedIn: boolean
+    qrPayload?: string | null
+  }>
+}
+
+type ApiNotification = {
+  id: string
+  eventId?: string | null
+  title: string
+  body: string
+  createdAt: string
+  audienceType: string
+  readAt?: string | null
+}
+
+function mapRsvp(experience: ApiGuestExperience): EventRSVP {
+  const { invitation } = experience
+  return {
+    eventId: invitation.eventId,
+    status: invitation.status === 'ACCEPTED'
+      ? 'CONFIRMED'
+      : invitation.status === 'DECLINED'
+        ? 'DECLINED'
+        : 'PENDING',
+    companions: invitation.companions?.length ?? 0,
+    maxCompanions: Math.max(0, invitation.allowedCapacity - 1),
+  }
+}
+
+function mapNotification(
+  value: ApiNotification,
+  source: 'PERSONAL' | 'EVENT' = 'PERSONAL',
+): NotificationItem {
+  const segmented = value.audienceType !== 'ALL'
+  return {
+    id: value.id,
+    title: value.title,
+    message: value.body,
+    createdAt: value.createdAt,
+    icon: 'bell',
+    unread: !value.readAt,
+    kind: segmented ? 'SEGMENTED' : 'GENERAL',
+    audience: value.audienceType,
+    eventId: value.eventId ?? undefined,
+    source,
+  }
 }
 
 function nowIso() {
@@ -1168,6 +1586,7 @@ async function realRequest<T>(
   method: string,
   body?: unknown,
   retryUnauthorized = true,
+  authenticated = true,
 ): Promise<T> {
   const response =
     await fetchApi(
@@ -1179,7 +1598,7 @@ async function realRequest<T>(
           'Content-Type':
             'application/json',
 
-          ...(accessToken
+          ...(authenticated && accessToken
             ? {
                 Authorization:
                   `Bearer ${accessToken}`,
@@ -1207,6 +1626,7 @@ async function realRequest<T>(
         method,
         body,
         false,
+        authenticated,
       )
     }
 
@@ -1225,6 +1645,20 @@ async function realRequest<T>(
   return response.status === 204
     ? (undefined as T)
     : response.json()
+}
+
+function apiRoot() {
+  return BASE.replace(/\/api\/?$/, '')
+}
+
+async function currentAccessToken() {
+  if (!accessToken) accessToken = await sessionStorage.get('accessToken')
+  return accessToken
+}
+
+async function authorizedAssetHeaders() {
+  const token = await currentAccessToken()
+  return token ? { Authorization: `Bearer ${token}` } : undefined
 }
 
 export async function restore() {
@@ -1254,7 +1688,9 @@ export async function restore() {
     )
 
     return true
-  } catch {
+  } catch (error) {
+    // Keep the signed-in shell available during an outage so the cached digital pass can still be opened.
+    if (accessToken && (error as Error).message?.includes('No se pudo conectar')) return true
     await clearLocalSession()
     return false
   }
@@ -1613,6 +2049,7 @@ export async function login(
     )
   }
 
+  await clearOfflinePasses()
   await saveTokens(
     await response.json(),
   )
@@ -1696,12 +2133,20 @@ export async function registerAccount(
     }
   }
 
-  return realRequest<RegisterResult>(
+  const response = await realRequest<{
+    message?: string
+    developmentToken?: string | null
+  }>(
     AUTH_ENDPOINTS.register,
     'POST',
     input,
     false,
   )
+
+  return {
+    status: 'PENDING',
+    message: response.message ?? 'Cuenta creada. Revisa el enlace de activación.',
+  }
 }
 
 export async function verifyEmail(
@@ -1716,8 +2161,7 @@ export async function verifyEmail(
     }
   }
 
-  return realRequest<{
-    status: 'ACTIVE'
+  const response = await realRequest<{
     message?: string
   }>(
     AUTH_ENDPOINTS.verifyEmail,
@@ -1727,6 +2171,11 @@ export async function verifyEmail(
     },
     false,
   )
+
+  return {
+    status: 'ACTIVE' as const,
+    message: response.message,
+  }
 }
 
 export async function resendVerification(
@@ -1797,7 +2246,10 @@ export async function resetPassword(
     AUTH_ENDPOINTS
       .resetPassword,
     'POST',
-    input,
+    {
+      token: input.token,
+      password: input.newPassword,
+    },
     false,
   )
 }
@@ -1833,6 +2285,7 @@ export async function changePassword(
 
 export async function loginWithGoogleToken(
   idToken: string,
+  googleProfile?: { email: string; name?: string },
 ): Promise<GoogleAuthResult> {
   if (DEMO_MODE) {
     const user =
@@ -1858,29 +2311,64 @@ export async function loginWithGoogleToken(
     }
   }
 
-  const result =
-    await realRequest<GoogleAuthResult>(
-      AUTH_ENDPOINTS.google,
-      'POST',
-      {
-        idToken,
-      },
-      false,
-    )
-
-  if (
-    result.status ===
-    'AUTHENTICATED'
-  ) {
-    await saveTokens({
-      accessToken:
-        result.accessToken,
-      refreshToken:
-        result.refreshToken,
-    })
+  let result: AuthSession & {
+    userId: string
+    name: string
+    email: string
+    roles: string[]
+    profileComplete: boolean
   }
 
-  return result
+  try {
+    result = await realRequest<typeof result>(
+      AUTH_ENDPOINTS.google,
+      'POST',
+      { idToken },
+      false,
+    )
+  } catch (error) {
+    const message = (error as Error).message
+    if (!message.toLowerCase().includes('teléfono válido')) {
+      throw error
+    }
+
+    return {
+      status: 'PROFILE_REQUIRED',
+      registrationToken: idToken,
+      email: googleProfile?.email ?? '',
+      name: googleProfile?.name,
+    }
+  }
+
+  if (!result.profileComplete) {
+    return {
+      status: 'PROFILE_REQUIRED',
+      registrationToken: idToken,
+      email: result.email,
+      name: result.name,
+    }
+  }
+
+  await clearOfflinePasses()
+  await saveTokens({
+    accessToken: result.accessToken,
+    refreshToken: result.refreshToken,
+  })
+
+  return {
+    status: 'AUTHENTICATED',
+    accessToken: result.accessToken,
+    refreshToken: result.refreshToken,
+    user: {
+      id: result.userId,
+      name: result.name,
+      email: result.email,
+      phone: '',
+      roles: result.roles,
+      status: 'ACTIVE',
+      provider: 'google',
+    },
+  }
 }
 
 export async function completeGoogleRegistration(
@@ -1902,16 +2390,30 @@ export async function completeGoogleRegistration(
     await realRequest<AuthSession>(
       AUTH_ENDPOINTS.google,
       'POST',
-      input,
+      {
+        idToken: input.registrationToken,
+        phoneNumber: input.phone,
+        acceptedTerms: input.acceptedTerms,
+      },
       false,
     )
 
+  await clearOfflinePasses()
   await saveTokens({
     accessToken:
       result.accessToken,
     refreshToken:
       result.refreshToken,
   })
+
+  await realRequest<ApiProfile>(
+    PROFILE_ENDPOINTS.me,
+    'PATCH',
+    {
+      name: input.name,
+      phoneNumber: input.phone,
+    },
+  )
 
   return result
 }
@@ -1940,10 +2442,10 @@ export async function getCurrentUser(): Promise<
     }
   }
 
-  return realRequest<AuthUser>(
+  return mapApiProfile(await realRequest<ApiProfile>(
     AUTH_ENDPOINTS.me,
     'GET',
-  )
+  ))
 }
 
 export async function updateProfile(
@@ -2030,11 +2532,14 @@ export async function updateProfile(
     }
   }
 
-  return realRequest<AuthUser>(
+  return mapApiProfile(await realRequest<ApiProfile>(
     PROFILE_ENDPOINTS.me,
     'PATCH',
-    input,
-  )
+    {
+      name: input.name,
+      phoneNumber: input.phone,
+    },
+  ))
 }
 
 export async function getProfilePreferences() {
@@ -2066,7 +2571,7 @@ export async function updateProfilePreferences(
 
   return realRequest<ProfilePreferences>(
     PROFILE_ENDPOINTS.preferences,
-    'PATCH',
+    'PUT',
     input,
   )
 }
@@ -2082,10 +2587,15 @@ export async function updateProfilePreferences(
  */
 
 export async function getEvents() {
-  return request<EventItem[]>(
-    EVENT_ENDPOINTS.events,
-    'GET',
-  )
+  if (DEMO_MODE) {
+    return request<EventItem[]>(EVENT_ENDPOINTS.events, 'GET')
+  }
+
+  const events = await realRequest<ApiEvent[]>(EVENT_ENDPOINTS.events, 'GET')
+  return events.map(event => ({
+    ...event,
+    location: event.location ?? '',
+  }))
 }
 
 export async function getEventModules(
@@ -2099,82 +2609,685 @@ export async function getEventModules(
   )
 }
 
+export async function getPublicInvitationExperience(token: string) {
+  if (DEMO_MODE) {
+    throw new Error('Abre el enlace de invitación con la configuración conectada a la API real.')
+  }
+  const safeToken = encodeURIComponent(token)
+  return realRequest<PublicInvitationExperience>(
+    `/invitations/access/${safeToken}/experience`,
+    'GET',
+    undefined,
+    false,
+    false,
+  )
+}
+
+export async function respondToPublicInvitation(
+  token: string,
+  accepted: boolean,
+  companions: string[],
+) {
+  if (DEMO_MODE) {
+    throw new Error('El RSVP de enlaces de invitación requiere la conexión a la API real.')
+  }
+  return realRequest<PublicInvitationExperience['invitation']>(
+    `/invitations/access/${encodeURIComponent(token)}/rsvp`,
+    'POST',
+    { accepted, companions },
+    false,
+    false,
+  )
+}
+
+export async function linkPublicInvitation(token: string) {
+  if (DEMO_MODE) {
+    throw new Error('Vincular una invitación requiere iniciar sesión en la API real.')
+  }
+  return realRequest<PublicInvitationExperience['invitation']>(
+    `/invitations/access/${encodeURIComponent(token)}/link`,
+    'POST',
+  )
+}
+
+export async function getModuleRecords(
+  eventId: string,
+  moduleCode: string,
+  recordType: string,
+) {
+  const module = moduleCode.toUpperCase()
+  const type = recordType.toUpperCase()
+
+  if (DEMO_MODE) {
+    return demoModuleRecords
+      .filter(record =>
+        record.eventId === eventId &&
+        record.moduleCode === module &&
+        record.recordType === type &&
+        record.status !== 'ARCHIVED',
+      )
+      .map(record => JSON.parse(JSON.stringify(record)) as ModuleRecord)
+  }
+
+  return realRequest<ModuleRecord[]>(
+    `/events/${eventId}/module-data/${module}/${type}`,
+    'GET',
+  )
+}
+
+export async function getModuleActionHistory(
+  eventId: string,
+  recordId: string,
+) {
+  if (DEMO_MODE) {
+    return demoModuleActions
+      .filter(action => action.recordId === recordId)
+      .map(action => ({ ...action, payload: { ...action.payload } }))
+  }
+
+  return realRequest<ModuleAction[]>(
+    `/events/${eventId}/module-data/records/${recordId}/actions`,
+    'GET',
+  )
+}
+
+export async function submitModuleAction(
+  eventId: string,
+  recordId: string,
+  input: {
+    action: string
+    payload?: Record<string, unknown>
+    quantity?: number
+  },
+) {
+  if (DEMO_MODE) {
+    const record = demoModuleRecords.find(item =>
+      item.eventId === eventId && item.id === recordId,
+    )
+    if (!record || record.status !== 'ACTIVE') {
+      throw new Error('Este registro ya no está disponible.')
+    }
+
+    const action = input.action.toUpperCase()
+    const quantity = input.quantity ?? 1
+    const history = demoModuleActions.filter(item => item.recordId === recordId)
+    const joins = history.filter(item => item.action === 'JOIN').length
+    const leaves = history.filter(item => item.action === 'LEAVE').length
+    const reservations = history.filter(item => item.action === 'RESERVE').length
+    const cancellations = history.filter(item => item.action === 'CANCEL').length
+    const priorVotes = history.filter(item => ['VOTE', 'ANSWER'].includes(item.action))
+    const multiplePollVotes = record.recordType === 'POLL' && record.payload.allowMultiple === true
+
+    if (action === 'JOIN' && joins > leaves) {
+      throw new Error('Ya estás en esta cola.')
+    }
+    if (action === 'LEAVE' && joins <= leaves) {
+      throw new Error('No tienes un turno activo en esta cola.')
+    }
+    if (action === 'RESERVE' && reservations > cancellations) {
+      throw new Error('Ya tienes una reserva para esta actividad.')
+    }
+    if (action === 'CANCEL' && reservations <= cancellations) {
+      throw new Error('No tienes una reserva activa que cancelar.')
+    }
+    if (['VOTE', 'ANSWER'].includes(action) && priorVotes.length > 0 && !multiplePollVotes) {
+      throw new Error('Tu respuesta ya fue registrada.')
+    }
+    if (action === 'VOTE' && multiplePollVotes &&
+      priorVotes.some(item => item.payload.optionId === input.payload?.optionId)) {
+      throw new Error('Ya votaste por esta opción.')
+    }
+    if (['JOIN', 'RESERVE'].includes(action) &&
+      record.capacity != null && record.currentCount + quantity > record.capacity) {
+      throw new Error('Ya no hay cupo disponible.')
+    }
+
+    if (['JOIN', 'RESERVE'].includes(action)) record.currentCount += quantity
+    if (['LEAVE', 'CANCEL'].includes(action)) record.currentCount = Math.max(0, record.currentCount - quantity)
+
+    const saved: ModuleAction = {
+      id: `demo-action-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+      recordId,
+      actorUserId: 'demo-user',
+      action,
+      payload: input.payload ?? {},
+      createdAt: new Date().toISOString(),
+      quantity,
+    }
+    demoModuleActions.push(saved)
+    return { ...saved, payload: { ...saved.payload } }
+  }
+
+  return realRequest<ModuleAction>(
+    `/events/${eventId}/module-data/records/${recordId}/actions`,
+    'POST',
+    { ...input, action: input.action.toUpperCase() },
+  )
+}
+
+export async function getQueuePosition(
+  eventId: string,
+  recordId: string,
+) {
+  if (DEMO_MODE) {
+    const active = new Map<string, number>()
+    demoModuleActions
+      .filter(action => action.recordId === recordId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .forEach(action => {
+        const actorId = action.actorUserId ?? 'demo-user'
+        if (action.action === 'JOIN' && !active.has(actorId)) active.set(actorId, active.size + 1)
+        if (action.action === 'LEAVE') active.delete(actorId)
+      })
+    const position = [...active.keys()].indexOf('demo-user')
+    return {
+      recordId,
+      position: position >= 0 ? position + 1 : null,
+      peopleAhead: position >= 0 ? position : 0,
+      waiting: active.size,
+    } satisfies QueuePosition
+  }
+
+  return realRequest<QueuePosition>(
+    `/events/${eventId}/module-data/queues/${recordId}/position`,
+    'GET',
+  )
+}
+
+export async function getNetworkingSuggestions(
+  eventId: string,
+) {
+  if (DEMO_MODE) return [] as ModuleRecord[]
+
+  return realRequest<ModuleRecord[]>(
+    `/events/${eventId}/module-data/networking/suggestions`,
+    'GET',
+  )
+}
+
+export async function createModuleRecord(
+  eventId: string,
+  moduleCode: string,
+  recordType: string,
+  input: {
+    title?: string
+    payload?: Record<string, unknown>
+    status?: string
+    capacity?: number
+    startsAt?: string
+    endsAt?: string
+    parentRecordId?: string
+  },
+) {
+  const module = moduleCode.toUpperCase()
+  const type = recordType.toUpperCase()
+
+  if (DEMO_MODE) {
+    let payload = input.payload ?? {}
+    let status = input.status ?? 'ACTIVE'
+    if (module === 'ORD' && type === 'ORDER') {
+      const items = (payload.items as Array<{ itemId: string; quantity: number }> | undefined) ?? []
+      const total = items.reduce((sum, item) => {
+        const menuItem = demoModuleRecords.find(record => record.id === item.itemId)
+        const price = Number(menuItem?.payload.price ?? 0)
+        return sum + price * item.quantity
+      }, 0)
+      payload = { ...payload, total }
+      status = 'PENDING'
+      items.forEach(item => {
+        const menuItem = demoModuleRecords.find(record => record.id === item.itemId)
+        if (menuItem) menuItem.currentCount += item.quantity
+      })
+    }
+
+    const record: ModuleRecord = {
+      id: `demo-record-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+      eventId,
+      moduleCode: module,
+      recordType: type,
+      ownerUserId: 'demo-user',
+      parentRecordId: input.parentRecordId,
+      status,
+      title: input.title,
+      payload,
+      capacity: input.capacity,
+      currentCount: 0,
+      startsAt: input.startsAt,
+      endsAt: input.endsAt,
+      createdAt: new Date().toISOString(),
+    }
+    demoModuleRecords.unshift(record)
+    return JSON.parse(JSON.stringify(record)) as ModuleRecord
+  }
+
+  return realRequest<ModuleRecord>(
+    `/events/${eventId}/module-data/${module}/${type}`,
+    'POST',
+    input,
+  )
+}
+
+export async function updateModuleRecord(
+  eventId: string,
+  recordId: string,
+  input: { status?: string; title?: string; payload?: Record<string, unknown> },
+) {
+  if (DEMO_MODE) {
+    const record = demoModuleRecords.find(item => item.eventId === eventId && item.id === recordId)
+    if (!record) throw new Error('No se encontró el registro.')
+    if (record.moduleCode === 'ORD' && record.recordType === 'ORDER' && record.status === 'PENDING' && input.status === 'CANCELLED') {
+      const items = (record.payload.items as Array<{ itemId: string; quantity: number }> | undefined) ?? []
+      items.forEach(item => {
+        const menuItem = demoModuleRecords.find(candidate => candidate.id === item.itemId)
+        if (menuItem) menuItem.currentCount = Math.max(0, menuItem.currentCount - item.quantity)
+      })
+      record.status = 'CANCELLED'
+      return JSON.parse(JSON.stringify(record)) as ModuleRecord
+    }
+    if (record.moduleCode === 'NET' && record.recordType === 'PROFILE' && input.payload) {
+      record.payload = { ...record.payload, ...input.payload }
+      return JSON.parse(JSON.stringify(record)) as ModuleRecord
+    }
+    throw new Error('No se puede cambiar el estado de este registro.')
+  }
+
+  return realRequest<ModuleRecord>(
+    `/events/${eventId}/module-data/records/${recordId}`,
+    'PATCH',
+    input,
+  )
+}
+
 export async function getEventAgenda(
   eventId: string,
 ) {
-  return request<EventAgenda>(
-    EVENT_ENDPOINTS.agenda(
-      eventId,
+  if (DEMO_MODE) {
+    return request<EventAgenda>(EVENT_ENDPOINTS.agenda(eventId), 'GET')
+  }
+
+  const [items, moments] = await Promise.all([
+    realRequest<ApiAgendaItem[]>(`/events/${eventId}/agenda`, 'GET'),
+    realRequest<{ now: ApiAgendaItem | null; next: ApiAgendaItem | null }>(
+      `/events/${eventId}/agenda/now-next`,
+      'GET',
     ),
-    'GET',
-  )
+  ])
+  return mapAgenda(items, moments, eventId)
+}
+
+export async function getMyAgenda(eventId: string) {
+  if (DEMO_MODE) {
+    const agenda = await getEventAgenda(eventId)
+    return agenda.activities.filter(item => demoAgendaFavorites.has(item.id))
+  }
+  const items = await realRequest<ApiAgendaItem[]>(`/events/${eventId}/agenda/mine`, 'GET')
+  return items.map(item => ({
+    id: item.id,
+    eventId: item.eventId,
+    title: item.title,
+    startsAt: item.startsAt,
+    endsAt: item.endsAt,
+    location: item.zone ?? undefined,
+    detail: item.description ?? item.responsible ?? undefined,
+    status: new Date(item.startsAt).getTime() > Date.now() ? 'UPCOMING' as const : 'FINISHED' as const,
+  }))
+}
+
+export async function setAgendaFavorite(eventId: string, activityId: string, enabled: boolean) {
+  if (DEMO_MODE) {
+    if (enabled) demoAgendaFavorites.add(activityId)
+    else demoAgendaFavorites.delete(activityId)
+    return
+  }
+  return realRequest<void>(`/events/${eventId}/agenda/${activityId}/favorite?enabled=${enabled}`, 'PUT')
+}
+
+export async function getEventPermissions(eventId: string) {
+  if (DEMO_MODE) return { eventId, owner: true, permissions: ['ALL'] } satisfies EventPermissions
+  return realRequest<EventPermissions>(`/events/${eventId}/permissions`, 'GET')
+}
+
+export async function getEventInvitations(eventId: string) {
+  if (DEMO_MODE) {
+    return demoPassState.filter(pass => pass.eventId === eventId).map((pass, index) => ({
+      id: pass.id,
+      eventId,
+      guestName: `Invitado ${index + 1}`,
+      status: pass.status === 'ACTIVE' ? 'ACCEPTED' : pass.status,
+      allowedCapacity: 1,
+      companions: [],
+      checkedIn: pass.accessStatus === 'CHECKED_IN' ? 1 : 0,
+      qrPayload: pass.qrValue,
+    }))
+  }
+  return realRequest<EventInvitation[]>(`/events/${eventId}/invitations`, 'GET')
+}
+
+export async function scanEventPass(eventId: string, qrPayload: string, direction: 'check-in' | 'check-out') {
+  if (DEMO_MODE) {
+    const pass = demoPassState.find(item => item.eventId === eventId && item.qrValue === qrPayload)
+    if (!pass) throw new Error('El código no pertenece a un pase de este evento.')
+    if (direction === 'check-in') {
+      if (pass.accessStatus === 'CHECKED_IN') throw new Error('Este pase ya registró su ingreso.')
+      pass.accessStatus = 'CHECKED_IN'
+    } else {
+      if (pass.accessStatus !== 'CHECKED_IN') throw new Error('Este pase no aparece dentro del evento.')
+      pass.accessStatus = 'CHECKED_OUT'
+    }
+    return pass
+  }
+  return realRequest<EventInvitation>(`/events/${eventId}/${direction}`, 'POST', { qrPayload, quantity: 1 })
+}
+
+export async function setInvitationAttendance(eventId: string, invitationId: string, direction: 'check-in' | 'check-out', memberIndex?: number) {
+  if (DEMO_MODE) {
+    const pass = demoPassState.find(item => item.id === invitationId || item.id === `invitation:${invitationId}`)
+    if (!pass) throw new Error('No se encontró a esta persona.')
+    if (direction === 'check-in') {
+      if (pass.accessStatus === 'CHECKED_IN') throw new Error('Esta persona ya registró su ingreso.')
+      pass.accessStatus = 'CHECKED_IN'
+    } else {
+      if (pass.accessStatus !== 'CHECKED_IN') throw new Error('Esta persona no aparece dentro del evento.')
+      pass.accessStatus = 'CHECKED_OUT'
+    }
+    return pass
+  }
+  return realRequest<EventInvitation>(`/events/${eventId}/invitations/${invitationId}/${direction}`, 'POST', { quantity: 1, ...(memberIndex === undefined ? {} : { memberIndex }) })
+}
+
+export async function getEventAssistance(eventId: string) {
+  if (DEMO_MODE) return demoAssistance.filter(item => item.eventId === eventId)
+  return realRequest<AssistanceRequest[]>(`/events/${eventId}/assistance`, 'GET')
+}
+
+export async function createEventAssistance(
+  eventId: string,
+  input: { category: string; details?: string; location?: string; invitationId?: string },
+  token?: string,
+) {
+  if (DEMO_MODE) {
+    const saved: AssistanceRequest = {
+      id: `demo-help-${Date.now()}`, eventId, category: input.category,
+      details: input.details, location: input.location, priority: /FIRST_AID|EMERGENCY|PRIMEROS/i.test(input.category) ? 100 : 0,
+      status: 'RECEIVED', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    }
+    demoAssistance = [saved, ...demoAssistance]
+    return saved
+  }
+  const path = token
+    ? `/invitations/access/${encodeURIComponent(token)}/assistance`
+    : `/events/${eventId}/assistance`
+  return realRequest<AssistanceRequest>(path, 'POST', input, !token, !token)
+}
+
+export async function updateEventAssistance(
+  eventId: string,
+  requestId: string,
+  input: { status: AssistanceRequest['status']; assignedUserId?: string },
+) {
+  if (DEMO_MODE) {
+    const request = demoAssistance.find(item => item.id === requestId)
+    if (!request) throw new Error('No se encontró la solicitud de ayuda.')
+    Object.assign(request, input, { updatedAt: new Date().toISOString() })
+    return request
+  }
+  return realRequest<AssistanceRequest>(`/events/${eventId}/assistance/${requestId}`, 'PATCH', input)
+}
+
+export async function searchEventMap(eventId: string, query: string) {
+  const search = query.trim()
+  if (search.length < 2) return [] as MapSearchResult[]
+  if (DEMO_MODE) {
+    const records = await Promise.all(['ZONE', 'POINT'].map(type => getModuleRecords(eventId, 'MAP', type)))
+    const term = search.toLocaleLowerCase()
+    return records.flat().filter(item => `${item.title ?? ''} ${item.payload.description ?? ''}`.toLocaleLowerCase().includes(term))
+      .map(item => ({ id: item.id, moduleCode: item.moduleCode, type: item.recordType, title: item.title, payload: item.payload }))
+  }
+  return realRequest<MapSearchResult[]>(`/events/${eventId}/module-data/map/search?q=${encodeURIComponent(search)}`, 'GET')
+}
+
+export async function getMyMapLocation(eventId: string) {
+  if (DEMO_MODE) return [] as MapSearchResult[]
+  return realRequest<MapSearchResult[]>(`/events/${eventId}/module-data/map/my-location`, 'GET')
+}
+
+export async function getEventFiles(eventId: string) {
+  if (DEMO_MODE) return [] as EventFile[]
+  return realRequest<EventFile[]>(`/events/${eventId}/files?module=GAL`, 'GET')
+}
+
+export async function getEventFileImageSource(file: EventFile) {
+  const headers = await authorizedAssetHeaders()
+  return { uri: `${apiRoot()}${file.downloadUrl}`, headers }
+}
+
+export async function uploadEventPhoto(eventId: string, asset: { uri: string; fileName?: string | null; mimeType?: string | null }, official = false) {
+  if (DEMO_MODE) throw new Error('La galería compartida necesita la API conectada y el almacenamiento del evento configurado.')
+  const path = `/events/${eventId}/files?module=GAL${official ? '&official=true' : ''}`
+  const send = async (token: string | null) => {
+    const form = new FormData()
+    const name = asset.fileName || `eventflow-${Date.now()}.jpg`
+    if (Platform.OS === 'web') {
+      const image = await fetch(asset.uri)
+      form.append('file', await image.blob(), name)
+    } else {
+      form.append('file', { uri: asset.uri, name, type: asset.mimeType || 'image/jpeg' } as unknown as Blob)
+    }
+    return fetchApi(`${BASE}${path}`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: form,
+    })
+  }
+  let token = await currentAccessToken()
+  let response = await send(token)
+  if (response.status === 401 && await refreshSession()) {
+    token = await currentAccessToken()
+    response = await send(token)
+  }
+  if (!response.ok) throw new Error(await errorMessage(response, 'No se pudo publicar la foto.'))
+  return response.json() as Promise<EventFile>
+}
+
+export async function moderateEventPhoto(eventId: string, fileId: string, status: 'ACTIVE' | 'REJECTED') {
+  if (DEMO_MODE) throw new Error('La moderación de fotos necesita la API conectada.')
+  return realRequest<EventFile>(`/events/${eventId}/files/${fileId}/moderation`, 'PATCH', { status })
 }
 
 export async function getEventRsvp(
   eventId: string,
 ) {
-  return request<EventRSVP>(
-    EVENT_ENDPOINTS.rsvp(
-      eventId,
-    ),
+  if (DEMO_MODE) {
+    return request<EventRSVP>(
+      EVENT_ENDPOINTS.rsvp(eventId),
+      'GET',
+    )
+  }
+
+  const invitations = await realRequest<ApiGuestExperience[]>(
+    '/invitations/mine',
     'GET',
   )
+  const experience = invitations.find(item => item.event.id === eventId)
+  if (!experience) {
+    throw new Error('No hay una invitación vinculada a este evento.')
+  }
+  return mapRsvp(experience)
 }
 
 export async function getRsvps() {
-  return request<EventRSVP[]>(
-    EVENT_ENDPOINTS.rsvps,
+  if (DEMO_MODE) {
+    return request<EventRSVP[]>(EVENT_ENDPOINTS.rsvps, 'GET')
+  }
+
+  const invitations = await realRequest<ApiGuestExperience[]>(
+    '/invitations/mine',
     'GET',
   )
+  return invitations.map(mapRsvp)
 }
 
 export async function updateEventRsvp(
   eventId: string,
   input: UpdateEventRsvpInput,
 ) {
-  return request<EventRSVP>(
-    EVENT_ENDPOINTS.rsvp(
-      eventId,
-    ),
-    'PATCH',
-    input,
+  if (DEMO_MODE) {
+    return request<EventRSVP>(
+      EVENT_ENDPOINTS.rsvp(eventId),
+      'PATCH',
+      input,
+    )
+  }
+
+  const invitations = await realRequest<ApiGuestExperience[]>(
+    '/invitations/mine',
+    'GET',
   )
+  const experience = invitations.find(item => item.event.id === eventId)
+  if (!experience) {
+    throw new Error('No hay una invitación vinculada a este evento.')
+  }
+
+  const companions = input.status === 'DECLINED'
+    ? []
+    : experience.invitation.companions.slice(0, input.companions)
+  while (companions.length < input.companions) {
+    companions.push(`Acompañante ${companions.length + 1}`)
+  }
+
+  const updated = await realRequest<ApiGuestExperience['invitation']>(
+    `/invitations/${experience.invitation.id}/rsvp`,
+    'POST',
+    { accepted: input.status === 'CONFIRMED', companions },
+  )
+  return mapRsvp({ ...experience, invitation: updated })
 }
 
 export async function getEventCapacity(
   eventId: string,
 ) {
-  return request<EventCapacity>(
-    EVENT_ENDPOINTS.capacity(
-      eventId,
-    ),
-    'GET',
-  )
+  if (DEMO_MODE) {
+    return request<EventCapacity>(EVENT_ENDPOINTS.capacity(eventId), 'GET')
+  }
+
+  const event = await realRequest<{
+    estimatedCapacity?: number | null
+  }>(`/events/${eventId}`, 'GET')
+  return {
+    eventId,
+    capacity: event.estimatedCapacity ?? undefined,
+  }
 }
 
 export async function getCapacities() {
-  return request<EventCapacity[]>(
-    EVENT_ENDPOINTS.capacities,
-    'GET',
-  )
+  if (DEMO_MODE) {
+    return request<EventCapacity[]>(EVENT_ENDPOINTS.capacities, 'GET')
+  }
+
+  const events = await realRequest<Array<{
+    id: string
+    estimatedCapacity?: number | null
+  }>>('/events', 'GET')
+  return events.map(event => ({
+    eventId: event.id,
+    capacity: event.estimatedCapacity ?? undefined,
+  }))
 }
 
 export async function getPasses() {
-  return request<EventPass[]>(
-    EVENT_ENDPOINTS.passes,
-    'GET',
-  )
+  if (DEMO_MODE) {
+    return request<EventPass[]>(EVENT_ENDPOINTS.passes, 'GET')
+  }
+
+  try {
+    const [invitations, orders, events] = await Promise.all([
+      realRequest<ApiGuestExperience[]>('/invitations/mine', 'GET'),
+      realRequest<ApiTicketOrder[]>('/ticket-orders/mine', 'GET'),
+      realRequest<Array<{
+        id: string
+        name: string
+        startsAt: string
+        location?: string | null
+        reentryAllowed?: boolean
+      }>>('/events', 'GET'),
+    ])
+    const eventById = new Map<string, ApiEvent>()
+    events.forEach(event => eventById.set(event.id, event))
+
+    const invitationPasses = invitations.map((experience): EventPass => {
+      const { invitation, event } = experience
+      const eventDetails = eventById.get(event.id)
+      return {
+        id: `invitation:${invitation.id}`,
+        eventId: event.id,
+        eventName: event.name,
+        startsAt: event.startsAt,
+        location: event.location ?? '',
+        passType: 'Invitación',
+        status: invitation.status === 'ACCEPTED'
+          ? 'ACTIVE'
+          : invitation.status === 'DECLINED'
+            ? 'DECLINED'
+            : 'PENDING',
+        qrValue: invitation.qrPayload ?? undefined,
+        accessStatus: invitation.checkedIn && invitation.checkedIn > 0
+          ? 'CHECKED_IN'
+          : 'OUTSIDE',
+        reentryAllowed: eventDetails?.reentryAllowed,
+      }
+    })
+
+    const ticketPasses = orders.flatMap((order): EventPass[] => {
+      const event = eventById.get(order.eventId)
+      if (!event) return []
+      return order.tickets.map((ticket): EventPass => ({
+        id: `ticket:${ticket.id}`,
+        eventId: order.eventId,
+        eventName: event.name,
+        startsAt: event.startsAt,
+        location: event.location ?? '',
+        passType: ticket.typeName,
+        status: ticket.status === 'ACTIVE'
+          ? 'ACTIVE'
+          : ticket.status === 'CANCELLED'
+            ? 'REVOKED'
+            : 'USED',
+        qrValue: ticket.qrPayload ?? undefined,
+        accessStatus: ticket.checkedIn ? 'CHECKED_IN' : 'OUTSIDE',
+        reentryAllowed: event.reentryAllowed,
+      }))
+    })
+
+    const passes = [...invitationPasses, ...ticketPasses]
+      .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
+    await sessionStorage.set(OFFLINE_PASSES_KEY, JSON.stringify(passes)).catch(() => undefined)
+    return passes
+  } catch (error) {
+    const message = (error as Error).message || ''
+    if (!message.includes('No se pudo conectar')) throw error
+    const raw = await sessionStorage.get(OFFLINE_PASSES_KEY)
+    if (!raw) throw error
+    try {
+      const cached = JSON.parse(raw)
+      if (!Array.isArray(cached)) throw error
+      return cached.filter(item => item && typeof item.id === 'string' && typeof item.eventId === 'string')
+        .map((item: EventPass) => ({ ...item, offlineCopy: true }))
+    } catch {
+      throw error
+    }
+  }
 }
 
 export async function getPass(
   passId: string,
 ) {
-  return request<EventPass>(
-    EVENT_ENDPOINTS.pass(
-      passId,
-    ),
-    'GET',
-  )
+  if (DEMO_MODE) {
+    return request<EventPass>(EVENT_ENDPOINTS.pass(passId), 'GET')
+  }
+
+  const pass = (await getPasses()).find(item => item.id === passId)
+  if (!pass) throw new Error('No se encontró el pase asociado a tu cuenta.')
+  return pass
 }
 
 /*
@@ -2192,14 +3305,34 @@ export async function getNotifications() {
     )
   }
 
-  return realRequest<NotificationItem[]>(
-    NOTIFICATION_ENDPOINTS.list,
-    'GET',
+  const [personal, events] = await Promise.all([
+    realRequest<ApiNotification[]>(NOTIFICATION_ENDPOINTS.list, 'GET'),
+    getEvents(),
+  ])
+  const eventNotifications = await Promise.all(events.map(async event => {
+    try {
+      return await realRequest<ApiNotification[]>(
+        `/events/${event.id}/notifications`,
+        'GET',
+      )
+    } catch {
+      return []
+    }
+  }))
+  const unique = new Map<string, NotificationItem>()
+  personal.forEach(item => unique.set(item.id, mapNotification(item, 'PERSONAL')))
+  eventNotifications.flat().forEach(item => {
+    unique.set(item.id, mapNotification(item, 'EVENT'))
+  })
+  return [...unique.values()].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   )
 }
 
 export async function markNotificationRead(
   notificationId: string,
+  eventId?: string,
+  source?: 'PERSONAL' | 'EVENT',
 ) {
   if (DEMO_MODE) {
     demoNotificationState =
@@ -2232,12 +3365,14 @@ export async function markNotificationRead(
     }
   }
 
-  return realRequest<NotificationItem>(
-    NOTIFICATION_ENDPOINTS.read(
-      notificationId,
-    ),
-    'PATCH',
+  const path = source === 'EVENT' && eventId
+    ? NOTIFICATION_ENDPOINTS.readEvent(eventId, notificationId)
+    : NOTIFICATION_ENDPOINTS.readPersonal(notificationId)
+  const notification = await realRequest<ApiNotification>(
+    path,
+    'POST',
   )
+  return mapNotification(notification, source ?? 'PERSONAL')
 }
 
 export async function markAllNotificationsRead() {
@@ -2255,12 +3390,22 @@ export async function markAllNotificationsRead() {
     }
   }
 
-  return realRequest<{
-    success: boolean
-  }>(
-    NOTIFICATION_ENDPOINTS.readAll,
-    'POST',
-  )
+  const unread = (await getNotifications()).filter(item => item.unread)
+  const personal = unread.filter(item => item.source !== 'EVENT')
+  const eventIds = [...new Set(unread
+    .filter(item => item.source === 'EVENT' && item.eventId)
+    .map(item => item.eventId as string))]
+  await Promise.all([
+    ...personal.map(item => realRequest<void>(
+      NOTIFICATION_ENDPOINTS.readPersonal(item.id),
+      'POST',
+    )),
+    ...eventIds.map(eventId => realRequest<{ updated: number }>(
+      NOTIFICATION_ENDPOINTS.readAllEvent(eventId),
+      'POST',
+    )),
+  ])
+  return { success: true }
 }
 
 export async function logoutAllSessions() {

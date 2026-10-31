@@ -25,7 +25,32 @@
       "favicon": "./assets/eventflow-mark.png"
     },
     "plugins": [
-      "@react-native-google-signin/google-signin"
+      "@react-native-google-signin/google-signin",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "EventFlow necesita la cámara para validar pases QR del evento.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": true
+        }
+      ],
+      [
+        "expo-calendar",
+        {
+          "writeOnlyAccess": true,
+          "writeOnlyCalendarPermission": "EventFlow necesita agregar actividades a tu calendario cuando tú lo solicites."
+        }
+      ],
+      "expo-notifications",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "EventFlow necesita acceder a las fotos que decidas compartir en la galería del evento.",
+          "cameraPermission": "EventFlow necesita la cámara cuando eliges tomar una foto para compartir.",
+          "microphonePermission": false
+        }
+      ]
     ]
   }
 }

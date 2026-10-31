@@ -12,6 +12,9 @@ export type EventModule = {
   category: string
   featured: boolean
   order: number
+  description?: string
+  enabled?: boolean
+  configuration?: Record<string, unknown>
 }
 
 export type RSVPStatus =
@@ -36,6 +39,7 @@ export type EventCapacity = {
 export type EventPassStatus =
   | 'ACTIVE'
   | 'PENDING'
+  | 'DECLINED'
   | 'USED'
   | 'REVOKED'
 
@@ -58,6 +62,7 @@ export type EventPass = {
   checkedInAt?: string
   checkedOutAt?: string
   revokedAt?: string
+  offlineCopy?: boolean
 }
 
 export type EventAgendaActivityStatus =

@@ -12,6 +12,11 @@ import { HomeScreen } from '../screens/home/HomeScreen'
 
 import { EventsScreen } from '../screens/events/EventsScreen'
 import { EventHomeScreen } from '../screens/events/EventHomeScreen'
+import { EventModuleScreen } from '../screens/events/EventModuleScreen'
+import { PublicInvitationScreen } from '../screens/events/PublicInvitationScreen'
+import { EventStaffScreen } from '../screens/events/EventStaffScreen'
+import { StaffScannerScreen } from '../screens/events/StaffScannerScreen'
+import { AssistanceQueueScreen, StaffGuestsScreen } from '../screens/events/StaffOperationsScreens'
 
 import { NotificationsScreen } from '../screens/notifications/NotificationsScreen'
 
@@ -33,6 +38,10 @@ const linking = {
 
       'Restablecer contraseña': {
         path: 'reset-password',
+      },
+
+      Invitación: {
+        path: 'invite/:token',
       },
     },
   },
@@ -113,6 +122,22 @@ export function AppNavigator({
         <Stack.Screen
           name="Inicio del evento"
           component={EventHomeScreen}
+        />
+
+        <Stack.Screen
+          name="Módulo del evento"
+          component={EventModuleScreen}
+        />
+
+        <Stack.Screen name="Centro del personal" component={EventStaffScreen} />
+        <Stack.Screen name="Escáner de acceso" component={StaffScannerScreen} />
+        <Stack.Screen name="Lista de invitados" component={StaffGuestsScreen} />
+        <Stack.Screen name="Cola de ayuda" component={AssistanceQueueScreen} />
+
+        <Stack.Screen
+          name="Invitación"
+          component={PublicInvitationScreen}
+          initialParams={{ signedIn }}
         />
 
         <Stack.Screen
