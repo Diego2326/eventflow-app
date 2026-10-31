@@ -26,6 +26,8 @@ const BASE =
   process.env.EXPO_PUBLIC_API_URL ||
   'https://eventflow-backend-990072178406.us-east4.run.app/api'
 
+const API_REQUEST_TIMEOUT_MS = 15_000
+
 export const DEMO_MODE =
   process.env.EXPO_PUBLIC_DEMO_MODE === 'true'
 
@@ -905,11 +907,50 @@ async function fetchApi(
   input: string,
   init?: RequestInit,
 ) {
+  const controller = new AbortController()
+  const upstreamSignal = init?.signal
+  let timedOut = false
+  const abortFromCaller = () => controller.abort()
+
+  if (upstreamSignal?.aborted) {
+    controller.abort()
+  } else {
+    upstreamSignal?.addEventListener(
+      'abort',
+      abortFromCaller,
+      { once: true },
+    )
+  }
+
+  const timeout = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, API_REQUEST_TIMEOUT_MS)
+
   try {
-    return await fetch(input, init)
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    })
   } catch {
+    if (timedOut) {
+      throw new Error(
+        'La solicitud tardó más de 15 segundos. Revisa tu conexión e inténtalo de nuevo.',
+      )
+    }
+
+    if (upstreamSignal?.aborted) {
+      throw new Error('La solicitud fue cancelada.')
+    }
+
     throw new Error(
       'No se pudo conectar con EventFlow. Verifica que la API esté encendida y que EXPO_PUBLIC_API_URL sea correcta.',
+    )
+  } finally {
+    clearTimeout(timeout)
+    upstreamSignal?.removeEventListener(
+      'abort',
+      abortFromCaller,
     )
   }
 }
@@ -1690,7 +1731,14 @@ export async function restore() {
     return true
   } catch (error) {
     // Keep the signed-in shell available during an outage so the cached digital pass can still be opened.
-    if (accessToken && (error as Error).message?.includes('No se pudo conectar')) return true
+    const message = (error as Error).message ?? ''
+    if (
+      accessToken &&
+      (message.includes('No se pudo conectar') ||
+        message.includes('tardó más de 15 segundos'))
+    ) {
+      return true
+    }
     await clearLocalSession()
     return false
   }
