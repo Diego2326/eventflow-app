@@ -42,7 +42,6 @@
           "writeOnlyCalendarPermission": "EventFlow necesita agregar actividades a tu calendario cuando tú lo solicites."
         }
       ],
-      "expo-notifications",
       [
         "expo-image-picker",
         {

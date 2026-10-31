@@ -4,7 +4,6 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  Platform,
   Pressable,
   RefreshControl,
   Share,
@@ -19,7 +18,6 @@ import { StatusBar } from 'expo-status-bar'
 import { Feather } from '@expo/vector-icons'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Calendar from 'expo-calendar'
-import * as Notifications from 'expo-notifications'
 import * as ImagePicker from 'expo-image-picker'
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator'
 
@@ -47,7 +45,6 @@ import {
 } from '../../services/api'
 import type { EventFile, EventPermissions, MapSearchResult, ModuleAction, ModuleRecord, QueuePosition } from '../../services/api'
 import type { EventAgenda, EventItem, EventModule } from '../../types/events'
-import { sessionStorage } from '../../services/sessionStorage'
 
 const NAVY = '#0B1D3A'
 const PURPLE = '#6848E7'
@@ -411,36 +408,9 @@ export function EventModuleScreen({
     try {
       await setAgendaFavorite(event.id, item.id, enabled)
       setFavoriteIds(current => enabled ? [...new Set([...current, item.id])] : current.filter(id => id !== item.id))
-      const reminderKey = `agenda-reminder:${event.id}:${item.id}`
       if (enabled) {
-        const start = new Date(item.startsAt).getTime()
-        let reminderScheduled = false
-        if (Platform.OS !== 'web' && start > Date.now() + 60_000) {
-          try {
-            if (Platform.OS === 'android') {
-              await Notifications.setNotificationChannelAsync('agenda-reminders', {
-                name: 'Recordatorios de agenda',
-                importance: Notifications.AndroidImportance.DEFAULT,
-              })
-            }
-            const currentPermission = await Notifications.getPermissionsAsync()
-            const permission = currentPermission.granted ? currentPermission : await Notifications.requestPermissionsAsync()
-            if (permission.granted) {
-              const notifyAt = new Date(Math.max(Date.now() + 5_000, start - 15 * 60_000))
-              const identifier = await Notifications.scheduleNotificationAsync({
-                content: { title: `Próximamente: ${item.title}`, body: item.location || `Empieza a las ${new Date(item.startsAt).toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' })}.`, data: { eventId: event.id, agendaItemId: item.id } },
-                trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: notifyAt },
-              })
-              await sessionStorage.set(reminderKey, identifier)
-              reminderScheduled = true
-            }
-          } catch { /* La agenda sigue guardada aunque el sistema no permita programar avisos. */ }
-        }
-        Alert.alert('Actividad guardada', reminderScheduled ? 'La añadimos a tu agenda y te avisaremos 15 minutos antes.' : 'La añadimos a tu agenda personal. Puedes activar recordatorios desde la configuración de notificaciones del teléfono.')
+        Alert.alert('Actividad guardada', 'La añadimos a tu agenda personal. Puedes consultarla desde la sección Mi agenda.')
       } else {
-        const identifier = await sessionStorage.get(reminderKey)
-        if (identifier) await Notifications.cancelScheduledNotificationAsync(identifier).catch(() => undefined)
-        await sessionStorage.remove(reminderKey)
         Alert.alert('Actividad retirada', 'La quitamos de tu agenda personal.')
       }
     } catch (actionError) {
