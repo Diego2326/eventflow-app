@@ -61,7 +61,7 @@ export function LoginScreen({
   navigation: any
 }) {
   const insets = useSafeAreaInsets()
-  const { height } = useWindowDimensions()
+  const { height, fontScale } = useWindowDimensions()
 
   const [identifier, setIdentifier] =
     useState('')
@@ -78,15 +78,23 @@ export function LoginScreen({
   const [error, setError] =
     useState('')
 
+  const [statusBarStyle, setStatusBarStyle] =
+    useState<'light' | 'dark'>('light')
+
   /*
    * Altura adaptable.
    * Evita que la fotografía ocupe media pantalla
    * en teléfonos pequeños.
    */
-  const heroHeight = Math.max(
-    350,
-    Math.min(390, height * 0.43),
+  const heroMinHeight = Math.max(
+    265,
+    Math.min(
+      360,
+      height * 0.36 + Math.max(fontScale - 1, 0) * 70,
+    ),
   )
+  const [heroHeight, setHeroHeight] =
+    useState(heroMinHeight)
 
   async function submit() {
     if (loading) return
@@ -183,7 +191,7 @@ export function LoginScreen({
 
   return (
     <View style={styles.screen}>
-      <StatusBar style="light" />
+      <StatusBar style={statusBarStyle} />
 
       <KeyboardAvoidingView
         style={styles.screen}
@@ -198,6 +206,20 @@ export function LoginScreen({
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          scrollEventThrottle={100}
+          onScroll={({ nativeEvent }) => {
+            const statusBarCrossedIntoSheet =
+              nativeEvent.contentOffset.y + insets.top >=
+              heroHeight - 26
+
+            setStatusBarStyle(current => {
+              const next = statusBarCrossedIntoSheet
+                ? 'dark'
+                : 'light'
+
+              return current === next ? current : next
+            })
+          }}
           bounces={false}
         >
           {/* =========================
@@ -210,10 +232,16 @@ export function LoginScreen({
             style={[
               styles.hero,
               {
-                height: heroHeight,
+                minHeight: heroMinHeight,
                 paddingTop: insets.top + 10,
               },
             ]}
+            onLayout={event => {
+              const nextHeight = event.nativeEvent.layout.height
+              setHeroHeight(current =>
+                current === nextHeight ? current : nextHeight,
+              )
+            }}
           >
             {/* Capa azul sobre la fotografía */}
             <LinearGradient
@@ -248,43 +276,20 @@ export function LoginScreen({
                 </Text>
               </Text>
 
-              <Text style={styles.brandSubtitle}>
-                Tu experiencia del evento{'\n'}
-                en un solo lugar
-              </Text>
             </View>
 
+            <Text style={styles.brandSubtitle}>
+              Tu experiencia del evento{'\n'}
+              en un solo lugar
+            </Text>
+
             {/* Copy inferior sobre la fotografía */}
-
             <View style={styles.heroFooter}>
-              <View style={styles.heroLeft}>
-                <Text style={styles.heroStatement}>
-                  Grandes eventos crean{'\n'}
-                  mejores personas.
-                </Text>
+              <Text style={styles.heroStatement}>
+                Grandes eventos crean mejores personas.
+              </Text>
 
-                <View style={styles.orangeLine} />
-              </View>
-
-              <View style={styles.heroRight}>
-                <Text style={styles.heroWord}>
-                  EVENTOS
-                </Text>
-
-                <Text style={styles.heroWord}>
-                  PERSONAS
-                </Text>
-
-                <Text style={styles.heroWord}>
-                  HISTORIAS
-                </Text>
-
-                <Text style={styles.heroWord}>
-                  QUE CONECTAN
-                </Text>
-
-                <View style={styles.orangeLineSmall} />
-              </View>
+              <View style={styles.orangeLine} />
             </View>
           </ImageBackground>
 
@@ -596,22 +601,25 @@ const styles = StyleSheet.create({
     width: '100%',
     backgroundColor: '#071B39',
     paddingHorizontal: 28,
+    paddingBottom: 28,
   },
 
   brandBlock: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 10,
+    justifyContent: 'center',
+    gap: 9,
   },
 
   logo: {
-    width: 55,
-    height: 55,
+    width: 42,
+    height: 42,
   },
 
   brandName: {
     color: '#FFFFFF',
-    fontSize: 34,
-    lineHeight: 40,
+    fontSize: 28,
+    lineHeight: 36,
     fontWeight: '800',
     letterSpacing: -1,
     marginTop: 2,
@@ -623,25 +631,15 @@ const styles = StyleSheet.create({
 
   brandSubtitle: {
     color: 'rgba(255,255,255,0.92)',
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 15,
+    lineHeight: 22,
     textAlign: 'center',
-    marginTop: 3,
+    marginTop: 12,
+    paddingHorizontal: 8,
   },
 
   heroFooter: {
-    position: 'absolute',
-    left: 28,
-    right: 28,
-    bottom: 43,
-
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-  },
-
-  heroLeft: {
-    flex: 1,
+    marginTop: 22,
   },
 
   heroStatement: {
@@ -649,6 +647,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 22,
     fontWeight: '500',
+    maxWidth: 330,
   },
 
   orangeLine: {
@@ -657,25 +656,6 @@ const styles = StyleSheet.create({
     borderRadius: 99,
     backgroundColor: '#FF674B',
     marginTop: 12,
-  },
-
-  heroRight: {
-    width: 120,
-  },
-
-  heroWord: {
-    color: 'rgba(255,255,255,0.86)',
-    fontSize: 8.5,
-    lineHeight: 17,
-    letterSpacing: 2.8,
-  },
-
-  orangeLineSmall: {
-    width: 24,
-    height: 3,
-    borderRadius: 99,
-    backgroundColor: '#FF674B',
-    marginTop: 8,
   },
 
   /* =========================

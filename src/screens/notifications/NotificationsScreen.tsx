@@ -410,11 +410,7 @@ export function NotificationsScreen({
           styles.content,
           {
             paddingBottom:
-              105 +
-              Math.max(
-                insets.bottom,
-                10,
-              ),
+              insets.bottom + 28,
           },
         ]}
         showsVerticalScrollIndicator={
@@ -895,114 +891,6 @@ export function NotificationsScreen({
         </View>
       </ScrollView>
 
-      {/* BOTTOM NAV */}
-
-      <View
-        style={[
-          styles.bottomNavigation,
-          {
-            paddingBottom:
-              Math.max(
-                insets.bottom,
-                10,
-              ),
-          },
-        ]}
-      >
-        <Pressable
-          style={styles.navItem}
-          onPress={() =>
-            navigation.navigate(
-              'Inicio',
-            )
-          }
-        >
-          <Feather
-            name="home"
-            size={24}
-            color="#747C8E"
-          />
-
-          <Text
-            style={
-              styles.navText
-            }
-          >
-            Inicio
-          </Text>
-        </Pressable>
-
-        <Pressable
-          style={styles.navItem}
-          onPress={() =>
-            navigation.navigate(
-              'Eventos',
-            )
-          }
-        >
-          <Feather
-            name="calendar"
-            size={24}
-            color="#747C8E"
-          />
-
-          <Text
-            style={
-              styles.navText
-            }
-          >
-            Eventos
-          </Text>
-        </Pressable>
-
-        <View
-          style={styles.navItem}
-        >
-          <Feather
-            name="bell"
-            size={24}
-            color={PURPLE}
-          />
-
-          <Text
-            style={[
-              styles.navText,
-              styles.navTextActive,
-            ]}
-          >
-            Notificaciones
-          </Text>
-
-          <View
-            style={
-              styles.navIndicator
-            }
-          />
-        </View>
-
-        <Pressable
-          style={styles.navItem}
-          onPress={() =>
-            navigation.navigate(
-              'Perfil',
-            )
-          }
-        >
-          <Feather
-            name="user"
-            size={24}
-            color="#747C8E"
-          />
-
-          <Text
-            style={
-              styles.navText
-            }
-          >
-            Perfil
-          </Text>
-        </Pressable>
-      </View>
     </SafeAreaView>
   )
 }
@@ -1490,65 +1378,4 @@ const styles =
       marginTop: 6,
     },
 
-    bottomNavigation: {
-      position: 'absolute',
-
-      left: 0,
-      right: 0,
-      bottom: 0,
-
-      minHeight: 80,
-
-      flexDirection: 'row',
-
-      alignItems: 'center',
-
-      justifyContent:
-        'space-around',
-
-      paddingTop: 7,
-      paddingHorizontal: 12,
-
-      backgroundColor:
-        'rgba(255,255,255,0.98)',
-
-      borderTopWidth: 1,
-      borderTopColor: BORDER,
-
-      elevation: 10,
-    },
-
-    navItem: {
-      flex: 1,
-
-      minHeight: 55,
-
-      alignItems: 'center',
-      justifyContent:
-        'center',
-
-      gap: 4,
-    },
-
-    navText: {
-      color: '#747C8E',
-
-      fontSize: 9.5,
-    },
-
-    navTextActive: {
-      color: PURPLE,
-
-      fontWeight: '700',
-    },
-
-    navIndicator: {
-      width: 5,
-      height: 5,
-
-      borderRadius: 3,
-
-      backgroundColor:
-        PURPLE,
-    },
   })

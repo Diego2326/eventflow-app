@@ -8,9 +8,7 @@ npm install
 npm start
 ```
 
-La app inicia en modo demo sin depender de la API. Usa las credenciales `ana.organizadora@eventflow.demo` / `EventFlowDemo1!`.
-
-Para integrar la API real, crea `.env` desde `.env.example`, define `EXPO_PUBLIC_DEMO_MODE=false` y configura `EXPO_PUBLIC_API_URL` con una URL accesible desde el dispositivo o emulador.
+La app se conecta por defecto a la API de Cloud Run. Puedes cambiar el destino con `EXPO_PUBLIC_API_URL`. Para activar datos locales de demostración, define explícitamente `EXPO_PUBLIC_DEMO_MODE=true`; la demo no se activa si falta esta variable.
 
 ## Funciones para asistentes y personal
 

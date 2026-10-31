@@ -23,11 +23,11 @@ import type {
 } from '../types/events'
 
 const BASE =
-  process.env.EXPO_PUBLIC_API_URL ??
-  'http://localhost:5080/api'
+  process.env.EXPO_PUBLIC_API_URL ||
+  'https://eventflow-backend-990072178406.us-east4.run.app/api'
 
 export const DEMO_MODE =
-  process.env.EXPO_PUBLIC_DEMO_MODE !== 'false'
+  process.env.EXPO_PUBLIC_DEMO_MODE === 'true'
 
 let accessToken: string | null = null
 
