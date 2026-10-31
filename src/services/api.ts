@@ -3206,6 +3206,7 @@ export async function getPasses() {
       realRequest<Array<{
         id: string
         name: string
+        type: string
         startsAt: string
         location?: string | null
         reentryAllowed?: boolean

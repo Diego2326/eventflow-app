@@ -10,6 +10,7 @@
     "expo": "^57.0.31",
     "expo-calendar": "~57.0.6",
     "expo-camera": "~57.0.6",
+    "expo-glass-effect": "~57.0.4",
     "expo-image-manipulator": "~57.0.21",
     "expo-image-picker": "~57.0.20",
     "expo-linear-gradient": "~57.0.2",

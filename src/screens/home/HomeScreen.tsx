@@ -20,10 +20,8 @@ import { StatusBar } from 'expo-status-bar'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Feather } from '@expo/vector-icons'
 
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { GlassView } from 'expo-glass-effect'
 
 import {
   getEvents,
@@ -66,8 +64,6 @@ export function HomeScreen({
 }: {
   navigation: any
 }) {
-  const insets = useSafeAreaInsets()
-
   const [events, setEvents] =
     useState<EventItem[] | null>(null)
 
@@ -183,6 +179,13 @@ export function HomeScreen({
               navigation.navigate('Notificaciones')
             }
           >
+            <GlassView
+              pointerEvents="none"
+              style={styles.headerGlass}
+              glassEffectStyle="regular"
+              tintColor="rgba(255,255,255,0.36)"
+            />
+
             <Feather
               name="bell"
               size={23}
@@ -224,12 +227,7 @@ export function HomeScreen({
           contentContainerStyle={[
             styles.content,
             {
-              paddingBottom:
-                105 +
-                Math.max(
-                  insets.bottom,
-                  10,
-                ),
+              paddingBottom: 28,
             },
           ]}
           refreshControl={
@@ -629,89 +627,6 @@ export function HomeScreen({
         </ScrollView>
       )}
 
-      {/* NAV */}
-      <View
-        style={[
-          styles.bottomNavigation,
-          {
-            paddingBottom:
-              Math.max(
-                insets.bottom,
-                10,
-              ),
-          },
-        ]}
-      >
-        <View style={styles.navItem}>
-          <Feather
-            name="home"
-            size={24}
-            color={PURPLE}
-          />
-
-          <Text
-            style={[
-              styles.navText,
-              styles.navTextActive,
-            ]}
-          >
-            Inicio
-          </Text>
-
-          <View style={styles.navIndicator} />
-        </View>
-
-        <Pressable
-          style={styles.navItem}
-          onPress={() =>
-            navigation.navigate('Eventos')
-          }
-        >
-          <Feather
-            name="calendar"
-            size={24}
-            color="#747C8E"
-          />
-
-          <Text style={styles.navText}>
-            Eventos
-          </Text>
-        </Pressable>
-
-        <Pressable
-          style={styles.navItem}
-          onPress={() =>
-            navigation.navigate('Notificaciones')
-          }
-        >
-          <Feather
-            name="bell"
-            size={24}
-            color="#747C8E"
-          />
-
-          <Text style={styles.navText}>
-            Notificaciones
-          </Text>
-        </Pressable>
-
-        <Pressable
-          style={styles.navItem}
-          onPress={() =>
-            navigation.navigate('Perfil')
-          }
-        >
-          <Feather
-            name="user"
-            size={24}
-            color="#747C8E"
-          />
-
-          <Text style={styles.navText}>
-            Perfil
-          </Text>
-        </Pressable>
-      </View>
     </SafeAreaView>
   )
 }
@@ -750,8 +665,16 @@ const styles = StyleSheet.create({
   headerIcon: {
     width: 42,
     height: 42,
+    borderRadius: 21,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.72)',
+  },
+
+  headerGlass: {
+    ...StyleSheet.absoluteFill,
+    borderRadius: 21,
   },
 
   notificationDot: {
@@ -1113,51 +1036,4 @@ const styles = StyleSheet.create({
     ],
   },
 
-  bottomNavigation: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-
-    minHeight: 80,
-
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-
-    paddingTop: 7,
-    paddingHorizontal: 12,
-
-    backgroundColor: 'rgba(255,255,255,0.98)',
-
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
-
-    elevation: 10,
-  },
-
-  navItem: {
-    flex: 1,
-    minHeight: 55,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  },
-
-  navText: {
-    color: '#747C8E',
-    fontSize: 9.5,
-  },
-
-  navTextActive: {
-    color: PURPLE,
-    fontWeight: '700',
-  },
-
-  navIndicator: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: PURPLE,
-  },
 })
