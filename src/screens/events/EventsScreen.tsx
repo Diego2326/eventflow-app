@@ -13,6 +13,7 @@ import {
 import { StatusBar } from 'expo-status-bar'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Feather } from '@expo/vector-icons'
+import { GlassOverlay } from '../../components/ui/GlassOverlay'
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -377,6 +378,7 @@ export function EventsScreen({
               )
             }
           >
+            <GlassOverlay style={styles.headerGlass} />
             <Feather
               name="bell"
               size={23}
@@ -392,6 +394,7 @@ export function EventsScreen({
             style={styles.profileButton}
             onPress={openProfile}
           >
+            <GlassOverlay style={styles.profileGlass} tintColor="rgba(23,52,86,0.42)" fallbackColor={NAVY_SOFT} />
             <Feather
               name="user"
               size={20}
@@ -850,8 +853,15 @@ const styles = StyleSheet.create({
   headerIconButton: {
     width: 42,
     height: 42,
+    borderRadius: 15,
+    overflow: 'hidden',
+    position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  headerGlass: {
+    borderRadius: 15,
   },
 
   notificationDot: {
@@ -870,9 +880,15 @@ const styles = StyleSheet.create({
     width: 43,
     height: 43,
     borderRadius: 22,
+    overflow: 'hidden',
+    position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: NAVY_SOFT,
+  },
+
+  profileGlass: {
+    borderRadius: 22,
   },
 
   scroll: {

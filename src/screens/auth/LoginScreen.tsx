@@ -17,6 +17,7 @@ import { StatusBar } from 'expo-status-bar'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Feather, FontAwesome } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { GlassOverlay } from '../../components/ui/GlassOverlay'
 
 import {
   login,
@@ -312,6 +313,7 @@ export function LoginScreen({
             {/* Icono superior */}
 
             <View style={styles.lockCircle}>
+              <GlassOverlay style={styles.lockGlass} tintColor="rgba(255,255,255,0.62)" fallbackColor="#F1F4F8" />
               <Feather
                 name="lock"
                 size={25}
@@ -712,6 +714,10 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
 
     elevation: 5,
+  },
+
+  lockGlass: {
+    borderRadius: 29,
   },
 
   title: {

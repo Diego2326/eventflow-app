@@ -3,6 +3,7 @@ import type { ComponentProps } from 'react'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
 import { Feather } from '@expo/vector-icons'
+import { GlassOverlay } from '../../components/ui/GlassOverlay'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { getEventPermissions } from '../../services/api'
@@ -54,7 +55,7 @@ export function EventStaffScreen({ route, navigation }: { route: any; navigation
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar style="dark" />
       <View style={styles.header}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Volver" onPress={() => navigation.goBack()} style={styles.back}><Feather name="arrow-left" size={21} color={NAVY} /></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Volver" onPress={() => navigation.goBack()} style={styles.back}><GlassOverlay style={styles.backGlass} /><Feather name="arrow-left" size={21} color={NAVY} /></Pressable>
         <View style={styles.headerCopy}><Text style={styles.headerTitle}>Centro del personal</Text><Text style={styles.headerSubtitle} numberOfLines={1}>{event.name}</Text></View>
       </View>
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 28 }]} showsVerticalScrollIndicator={false}>
@@ -77,7 +78,8 @@ export function EventStaffScreen({ route, navigation }: { route: any; navigation
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F7F8FC' },
   header: { minHeight: 64, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: BORDER },
-  back: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: '#F3F4F8' },
+  back: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 13, overflow: 'hidden', position: 'relative', backgroundColor: '#F3F4F8' },
+  backGlass: { borderRadius: 13, backgroundColor: 'rgba(255,255,255,0.56)' },
   headerCopy: { flex: 1 }, headerTitle: { color: NAVY, fontSize: 15, fontWeight: '800' }, headerSubtitle: { color: MUTED, fontSize: 11, marginTop: 3 },
   content: { padding: 20, gap: 18 },
   hero: { paddingTop: 8, gap: 8 }, heroIcon: { width: 48, height: 48, marginBottom: 4, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: SOFT },

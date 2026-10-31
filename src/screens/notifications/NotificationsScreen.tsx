@@ -15,6 +15,7 @@ import {
 
 import { StatusBar } from 'expo-status-bar'
 import { Feather } from '@expo/vector-icons'
+import { GlassOverlay } from '../../components/ui/GlassOverlay'
 
 import {
   SafeAreaView,
@@ -396,6 +397,7 @@ export function NotificationsScreen({
             )
           }
         >
+          <GlassOverlay style={styles.profileGlass} tintColor="rgba(23,52,86,0.42)" fallbackColor={NAVY} />
           <Feather
             name="user"
             size={20}
@@ -934,12 +936,18 @@ const styles =
       height: 43,
 
       borderRadius: 22,
+      overflow: 'hidden',
+      position: 'relative',
 
       alignItems: 'center',
       justifyContent:
         'center',
 
       backgroundColor: NAVY,
+    },
+
+    profileGlass: {
+      borderRadius: 22,
     },
 
     scroll: {

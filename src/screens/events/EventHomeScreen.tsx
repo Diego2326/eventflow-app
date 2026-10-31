@@ -15,6 +15,7 @@ import {
   Feather,
   MaterialCommunityIcons,
 } from '@expo/vector-icons'
+import { GlassOverlay } from '../../components/ui/GlassOverlay'
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -386,6 +387,7 @@ export function EventHomeScreen({
             navigation.goBack()
           }
         >
+          <GlassOverlay style={styles.headerGlass} />
           <Feather
             name="arrow-left"
             size={26}
@@ -397,6 +399,7 @@ export function EventHomeScreen({
           style={styles.headerButton}
           onPress={() => navigation.navigate('Notificaciones')}
         >
+          <GlassOverlay style={styles.headerGlass} />
           <Feather name="bell" size={21} color={NAVY} />
         </Pressable>
       </View>
@@ -1178,6 +1181,7 @@ export function EventHomeScreen({
           },
         ]}
       >
+        <GlassOverlay style={styles.bottomNavigationGlass} effectStyle="clear" fallbackColor="rgba(255,255,255,0.82)" />
         {/* INICIO GENERAL */}
         <Pressable
           style={styles.navItem}
@@ -1281,8 +1285,15 @@ const styles = StyleSheet.create({
   headerButton: {
     width: 42,
     height: 42,
+    borderRadius: 15,
+    overflow: 'hidden',
+    position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  headerGlass: {
+    borderRadius: 15,
   },
 
   scroll: {
@@ -2087,6 +2098,14 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
 
     elevation: 10,
+  },
+
+  bottomNavigationGlass: {
+    top: 0,
+    bottom: 0,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.82)',
   },
 
   navItem: {

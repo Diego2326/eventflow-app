@@ -15,6 +15,7 @@ import {
 
 import { StatusBar } from 'expo-status-bar'
 import { Feather } from '@expo/vector-icons'
+import { GlassOverlay } from '../../components/ui/GlassOverlay'
 
 import {
   SafeAreaView,
@@ -316,6 +317,7 @@ export function ProfileScreen({
               )
             }
           >
+            <GlassOverlay style={styles.notificationGlass} />
             <Feather
               name="bell"
               size={23}
@@ -810,9 +812,16 @@ const styles =
     notificationButton: {
       width: 42,
       height: 42,
+      borderRadius: 15,
+      overflow: 'hidden',
+      position: 'relative',
 
       alignItems: 'center',
       justifyContent: 'center',
+    },
+
+    notificationGlass: {
+      borderRadius: 15,
     },
 
     notificationDot: {

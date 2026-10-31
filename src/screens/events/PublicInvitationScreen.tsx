@@ -13,6 +13,7 @@ import { StatusBar } from 'expo-status-bar'
 import { Feather } from '@expo/vector-icons'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { DigitalPassQr } from '../../components/ui/DigitalPassQr'
+import { GlassOverlay } from '../../components/ui/GlassOverlay'
 
 import {
   getPublicInvitationExperience,
@@ -132,6 +133,7 @@ export function PublicInvitationScreen({
       <StatusBar style="dark" />
       <View style={styles.header}>
         <Pressable accessibilityRole="button" accessibilityLabel="Volver" onPress={() => navigation.goBack()} style={styles.backButton}>
+          <GlassOverlay style={styles.backGlass} />
           <Feather name="arrow-left" size={22} color={NAVY} />
         </Pressable>
         <Text style={styles.headerTitle}>Tu invitación</Text>
@@ -252,7 +254,8 @@ export function PublicInvitationScreen({
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F7F8FC' },
   header: { minHeight: 62, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: WHITE, borderBottomWidth: 1, borderBottomColor: BORDER },
-  backButton: { width: 38, height: 38, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F3F4F8' },
+  backButton: { width: 38, height: 38, borderRadius: 13, overflow: 'hidden', position: 'relative', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F3F4F8' },
+  backGlass: { borderRadius: 13, backgroundColor: 'rgba(255,255,255,0.56)' },
   headerTitle: { color: NAVY, fontSize: 14, fontWeight: '800' },
   headerSpacer: { width: 38 },
   content: { padding: 21, gap: 13 },

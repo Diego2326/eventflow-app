@@ -16,6 +16,7 @@ import {
 import type { ImageSourcePropType } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
 import { Feather } from '@expo/vector-icons'
+import { GlassOverlay } from '../../components/ui/GlassOverlay'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Calendar from 'expo-calendar'
 import * as ImagePicker from 'expo-image-picker'
@@ -885,6 +886,7 @@ export function EventModuleScreen({
       <StatusBar style="dark" />
       <View style={styles.header}>
         <Pressable accessibilityRole="button" accessibilityLabel="Volver" onPress={() => navigation.goBack()} style={styles.backButton}>
+          <GlassOverlay style={styles.backGlass} />
           <Feather name="arrow-left" size={22} color={NAVY} />
         </Pressable>
         <View style={styles.headerIcon}><Feather name={icon} size={20} color={PURPLE} /></View>
@@ -948,7 +950,8 @@ function EmptyState({ message }: { message: string }) {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: PAGE },
   header: { minHeight: 66, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, gap: 12, borderBottomWidth: 1, borderBottomColor: BORDER, backgroundColor: WHITE },
-  backButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: '#F3F4F8' },
+  backButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 13, overflow: 'hidden', position: 'relative', backgroundColor: '#F3F4F8' },
+  backGlass: { borderRadius: 13, backgroundColor: 'rgba(255,255,255,0.56)' },
   headerIcon: { width: 38, height: 38, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: PURPLE_SOFT },
   headerCopy: { flex: 1, minWidth: 0 },
   headerTitle: { color: NAVY, fontSize: 14, fontWeight: '800' },

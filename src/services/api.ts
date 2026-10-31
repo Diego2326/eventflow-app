@@ -1,5 +1,4 @@
 import { sessionStorage } from './sessionStorage'
-import { Platform } from 'react-native'
 
 import {
   DEMO_EMAIL,
@@ -3175,36 +3174,50 @@ export async function getEventFiles(eventId: string) {
 }
 
 export async function getEventFileImageSource(file: EventFile) {
+  if (/^https?:\/\//i.test(file.downloadUrl)) {
+    return { uri: file.downloadUrl }
+  }
   const headers = await authorizedAssetHeaders()
   return { uri: `${apiRoot()}${file.downloadUrl}`, headers }
 }
 
 export async function uploadEventPhoto(eventId: string, asset: { uri: string; fileName?: string | null; mimeType?: string | null }, official = false) {
   if (DEMO_MODE) throw new Error('La galería compartida necesita la API conectada y el almacenamiento del evento configurado.')
-  const path = `/events/${eventId}/files?module=GAL${official ? '&official=true' : ''}`
-  const send = async (token: string | null) => {
-    const form = new FormData()
-    const name = asset.fileName || `eventflow-${Date.now()}.jpg`
-    if (Platform.OS === 'web') {
-      const image = await fetch(asset.uri)
-      form.append('file', await image.blob(), name)
-    } else {
-      form.append('file', { uri: asset.uri, name, type: asset.mimeType || 'image/jpeg' } as unknown as Blob)
-    }
-    return fetchApi(`${BASE}${path}`, {
-      method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      body: form,
+  const name = asset.fileName || `eventflow-${Date.now()}.jpg`
+  const localResponse = await fetch(asset.uri)
+  if (!localResponse.ok) throw new Error('No se pudo leer la foto seleccionada.')
+  const image = await localResponse.blob()
+  const contentType = asset.mimeType || image.type || 'image/jpeg'
+  const ticket = await realRequest<{
+    fileId: string
+    uploadUrl: string
+    headers: Record<string, string>
+  }>(`/events/${eventId}/files/upload-url`, 'POST', {
+    module: 'GAL',
+    fileName: name,
+    contentType,
+    sizeBytes: image.size,
+    official,
+  })
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 90_000)
+  try {
+    const upload = await fetch(ticket.uploadUrl, {
+      method: 'PUT',
+      headers: ticket.headers,
+      body: image,
+      signal: controller.signal,
     })
+    if (!upload.ok) throw new Error('No se pudo guardar la foto directamente en el almacenamiento del evento.')
+    return await realRequest<EventFile>(`/events/${eventId}/files/${ticket.fileId}/complete-upload`, 'POST')
+  } catch (error) {
+    await realRequest<void>(`/events/${eventId}/files/${ticket.fileId}/upload`, 'DELETE').catch(() => undefined)
+    if (error instanceof Error && error.message.includes('directamente')) throw error
+    throw new Error('La carga directa de la foto falló o tardó demasiado. Inténtalo de nuevo.')
+  } finally {
+    clearTimeout(timeout)
   }
-  let token = await currentAccessToken()
-  let response = await send(token)
-  if (response.status === 401 && await refreshSession()) {
-    token = await currentAccessToken()
-    response = await send(token)
-  }
-  if (!response.ok) throw new Error(await errorMessage(response, 'No se pudo publicar la foto.'))
-  return response.json() as Promise<EventFile>
 }
 
 export async function moderateEventPhoto(eventId: string, fileId: string, status: 'ACTIVE' | 'REJECTED') {
